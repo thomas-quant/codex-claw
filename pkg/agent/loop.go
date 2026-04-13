@@ -3280,12 +3280,15 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 				}
 
 				return commands.StatusSnapshot{
-					ThreadID:      status.ThreadID,
-					Model:         status.Model,
-					Provider:      status.Provider,
-					ThinkingMode:  status.ThinkingMode,
-					FastEnabled:   status.FastEnabled,
-					RecoveryState: status.RecoveryState,
+					ThreadID:          status.ThreadID,
+					Model:             status.Model,
+					Provider:          status.Provider,
+					ThinkingMode:      status.ThinkingMode,
+					FastEnabled:       status.FastEnabled,
+					LastUserMessageAt: status.LastUserMessageAt,
+					LastCompactionAt:  status.LastCompactionAt,
+					ForceFreshThread:  status.ForceFreshThread,
+					RecoveryState:     status.RecoveryState,
 				}
 			}
 			rt.SetModel = func(value string) (string, error) {

@@ -1149,12 +1149,15 @@ func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *test
 			{ID: "gpt-5.4-mini", Provider: "codex"},
 		},
 		status: providers.InteractiveThreadStatus{
-			ThreadID:      "thr_123",
-			Model:         "gpt-5.4",
-			Provider:      "codex",
-			ThinkingMode:  "medium",
-			FastEnabled:   false,
-			RecoveryState: "resumed",
+			ThreadID:          "thr_123",
+			Model:             "gpt-5.4",
+			Provider:          "codex",
+			ThinkingMode:      "medium",
+			FastEnabled:       false,
+			LastUserMessageAt: time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC),
+			LastCompactionAt:  time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC),
+			ForceFreshThread:  true,
+			RecoveryState:     "resumed",
 		},
 	}
 	al := NewAgentLoop(cfg, msgBus, provider)
@@ -1181,6 +1184,15 @@ func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *test
 	status := rt.ReadStatus()
 	if status.ThreadID != "thr_123" || status.Model != "gpt-5.4" || status.ThinkingMode != "medium" {
 		t.Fatalf("ReadStatus() = %#v, want thread/model/thinking state", status)
+	}
+	if !status.LastUserMessageAt.Equal(time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC)) {
+		t.Fatalf("ReadStatus() last_user_message_at = %v, want %v", status.LastUserMessageAt, time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC))
+	}
+	if !status.LastCompactionAt.Equal(time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC)) {
+		t.Fatalf("ReadStatus() last_compaction_at = %v, want %v", status.LastCompactionAt, time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC))
+	}
+	if !status.ForceFreshThread {
+		t.Fatal("ReadStatus() force_fresh_thread = false, want true")
 	}
 
 	oldModel, err := rt.SetModel("gpt-5.4-mini")
