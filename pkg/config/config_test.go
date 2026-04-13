@@ -399,6 +399,50 @@ func TestSaveConfig_PreservesDisabledTelegramPlaceholder(t *testing.T) {
 	}
 }
 
+func TestSaveConfig_RoundTripsNonModelSecurityConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	securityPath := securityPath(configPath)
+
+	cfg := DefaultConfig()
+	cfg.Channels.Telegram.Enabled = true
+	cfg.Channels.Telegram.Token = *NewSecureString("telegram-secret-token")
+	cfg.Tools.Skills.Github.Token = *NewSecureString("github-secret-token")
+	cfg.Tools.Web.Brave.APIKeys = SecureStrings{NewSecureString("brave-secret-key")}
+
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	securityData, err := os.ReadFile(securityPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) failed: %v", securityPath, err)
+	}
+	if !strings.Contains(string(securityData), "telegram-secret-token") {
+		t.Fatalf(".security.yml should contain telegram token, got: %s", string(securityData))
+	}
+	if !strings.Contains(string(securityData), "github-secret-token") {
+		t.Fatalf(".security.yml should contain github token, got: %s", string(securityData))
+	}
+	if !strings.Contains(string(securityData), "brave-secret-key") {
+		t.Fatalf(".security.yml should contain brave key, got: %s", string(securityData))
+	}
+
+	reloaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if got := reloaded.Channels.Telegram.Token.String(); got != "telegram-secret-token" {
+		t.Fatalf("Telegram.Token = %q, want %q", got, "telegram-secret-token")
+	}
+	if got := reloaded.Tools.Skills.Github.Token.String(); got != "github-secret-token" {
+		t.Fatalf("Skills.Github.Token = %q, want %q", got, "github-secret-token")
+	}
+	if got := reloaded.Tools.Web.Brave.APIKey(); got != "brave-secret-key" {
+		t.Fatalf("Web.Brave.APIKey() = %q, want %q", got, "brave-secret-key")
+	}
+}
+
 // TestConfig_Complete verifies all config fields are set
 func TestConfig_Complete(t *testing.T) {
 	cfg := DefaultConfig()

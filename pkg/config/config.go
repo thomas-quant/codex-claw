@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"gopkg.in/yaml.v3"
 
 	"github.com/sipeed/picoclaw/pkg"
 	"github.com/sipeed/picoclaw/pkg/fileutil"
@@ -1036,6 +1037,10 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := cfg.SecurityCopyFrom(path); err != nil {
+		return nil, fmt.Errorf("failed to load security config: %w", err)
+	}
+
 	if err = env.Parse(cfg); err != nil {
 		return nil, err
 	}
@@ -1131,6 +1136,14 @@ func SaveConfig(path string, cfg *Config) error {
 	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return err
 	}
+	sec := &SecurityConfig{
+		Channels: cfg.Channels,
+		Tools:    cfg.Tools,
+	}
+	if err := saveSecurityConfig(securityPath(path), sec); err != nil {
+		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
+		return err
+	}
 	return nil
 }
 
@@ -1153,8 +1166,18 @@ func expandHome(path string) string {
 }
 
 func (c *Config) SecurityCopyFrom(path string) error {
-	sec := &SecurityConfig{}
-	return loadSecurityConfig(sec, securityPath(path))
+	secPath := securityPath(path)
+	data, err := os.ReadFile(secPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read security config: %w", err)
+	}
+	if err := yaml.Unmarshal(data, c); err != nil {
+		return fmt.Errorf("failed to parse security config: %w", err)
+	}
+	return nil
 }
 
 func (t *ToolsConfig) IsToolEnabled(name string) bool {

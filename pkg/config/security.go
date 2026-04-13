@@ -23,8 +23,11 @@ const (
 	SecurityConfigFile = ".security.yml"
 )
 
-// SecurityConfig is the separate on-disk contract for non-model secret helpers.
-type SecurityConfig struct{}
+// SecurityConfig is the separate on-disk contract for non-model secrets.
+type SecurityConfig struct {
+	Channels ChannelsConfig `yaml:"channels,omitempty"`
+	Tools    ToolsConfig    `yaml:",inline"`
+}
 
 // securityPath returns the path to security.yml relative to the config file
 func securityPath(configPath string) string {
