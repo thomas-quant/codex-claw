@@ -30,6 +30,7 @@ type RuntimeStatusSnapshot struct {
 	FastEnabled       bool           `json:"fast_enabled"`
 	LastUserMessageAt time.Time      `json:"last_user_message_at,omitempty"`
 	LastCompactionAt  time.Time      `json:"last_compaction_at,omitempty"`
+	ForceFreshThread  bool           `json:"force_fresh_thread"`
 	ClientStarted     bool           `json:"client_started"`
 	TurnActive        bool           `json:"turn_active"`
 	KnownModels       []string       `json:"known_models,omitempty"`
@@ -52,30 +53,33 @@ func BuildRuntimeStatus(input RuntimeStatusInput) RuntimeStatusSnapshot {
 
 	if !input.Client.LastCompactionAt.IsZero() {
 		snapshot.LastCompactionAt = input.Client.LastCompactionAt
-	} else if raw, ok := input.Binding.Metadata["last_compaction_at"].(string); ok {
+	} else if raw, ok := input.Binding.Metadata[bindingMetadataLastCompactionAt].(string); ok {
 		if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
 			snapshot.LastCompactionAt = parsed
 		}
 	}
 	if snapshot.Recovery.Mode == "" {
-		if mode, ok := input.Binding.Metadata["recovery_mode"].(string); ok {
+		if mode, ok := input.Binding.Metadata[bindingMetadataRecoveryMode].(string); ok {
 			snapshot.Recovery.Mode = mode
 		}
 	}
 	if !snapshot.Recovery.RestartAttempted {
-		if attempted, ok := input.Binding.Metadata["restart_attempted"].(bool); ok {
+		if attempted, ok := input.Binding.Metadata[bindingMetadataRestartAttempted].(bool); ok {
 			snapshot.Recovery.RestartAttempted = attempted
 		}
 	}
 	if !snapshot.Recovery.ResumeAttempted {
-		if attempted, ok := input.Binding.Metadata["resume_attempted"].(bool); ok {
+		if attempted, ok := input.Binding.Metadata[bindingMetadataResumeAttempted].(bool); ok {
 			snapshot.Recovery.ResumeAttempted = attempted
 		}
 	}
 	if !snapshot.Recovery.FellBackToFresh {
-		if fresh, ok := input.Binding.Metadata["fell_back_to_fresh"].(bool); ok {
+		if fresh, ok := input.Binding.Metadata[bindingMetadataFellBackToFresh].(bool); ok {
 			snapshot.Recovery.FellBackToFresh = fresh
 		}
+	}
+	if fresh, ok := input.Binding.Metadata[bindingMetadataForceFreshThread].(bool); ok {
+		snapshot.ForceFreshThread = fresh
 	}
 
 	return snapshot

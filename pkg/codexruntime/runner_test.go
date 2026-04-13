@@ -32,6 +32,9 @@ func TestRunner_ResumeFallsBackToStart(t *testing.T) {
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
 		InputText:  "hi",
+		Recovery: RecoveryRequest{
+			AllowResume: true,
+		},
 		OnChunk: func(chunk string) {
 			chunks = append(chunks, chunk)
 		},
@@ -95,6 +98,9 @@ func TestRunner_ResumedThreadKeepsStoredModel(t *testing.T) {
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
 		InputText:  "hi",
+		Recovery: RecoveryRequest{
+			AllowResume: true,
+		},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -122,6 +128,44 @@ func TestRunner_ResumedThreadKeepsStoredModel(t *testing.T) {
 	}
 	if binding.Model != "gpt-5.2" {
 		t.Fatalf("Load() model = %q, want %q", binding.Model, "gpt-5.2")
+	}
+}
+
+func TestRunner_ZeroValueRecoveryStartsFreshThread(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:      "telegram:chat-1:coder",
+		ThreadID: "thr_existing",
+		Model:    "gpt-5.2",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	client := &fakeRunnerClient{
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"fresh"},
+	}
+
+	runner := NewRunner(client, store)
+	got, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "telegram:chat-1:coder",
+		Model:      "gpt-5.4",
+		InputText:  "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	if got.ThreadID != "thr_new" {
+		t.Fatalf("RunTextTurn() thread_id = %q, want %q", got.ThreadID, "thr_new")
+	}
+	if client.resumeCalls != 0 {
+		t.Fatalf("ResumeThread() calls = %d, want %d", client.resumeCalls, 0)
+	}
+	if !client.started {
+		t.Fatal("expected runner to start a fresh thread")
 	}
 }
 
@@ -220,6 +264,228 @@ func TestRunner_RestartsThenRetriesResumeBeforeStartingFresh(t *testing.T) {
 	}
 	if binding.Metadata["recovery_mode"] != "resume_after_restart" {
 		t.Fatalf("Load() recovery_mode = %#v, want %q", binding.Metadata["recovery_mode"], "resume_after_restart")
+	}
+}
+
+func TestRunner_ForceFreshThreadSkipsResumeAndStartsNewThread(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:      "telegram:chat-1:coder",
+		ThreadID: "thr_old",
+		Model:    "gpt-5.4",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	client := &fakeRunnerClient{
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"fresh"},
+	}
+	runner := NewRunner(client, store)
+
+	got, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "telegram:chat-1:coder",
+		Model:      "gpt-5.4",
+		InputText:  "bootstrap payload",
+		Recovery: RecoveryRequest{
+			AllowResume:        true,
+			AllowServerRestart: true,
+		},
+		Control: ControlRequest{
+			ForceFreshThread: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	if got.ThreadID != "thr_new" {
+		t.Fatalf("RunTextTurn() thread_id = %q, want %q", got.ThreadID, "thr_new")
+	}
+	if client.resumeCalls != 0 {
+		t.Fatalf("ResumeThread() calls = %d, want %d", client.resumeCalls, 0)
+	}
+	if !client.started {
+		t.Fatal("expected runner to start a fresh thread")
+	}
+
+	binding, ok, err := store.Load("telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected saved binding to remain present")
+	}
+	if binding.Metadata["force_fresh_thread"] != nil {
+		t.Fatalf("Load() force_fresh_thread = %#v, want cleared after consuming force-fresh control", binding.Metadata["force_fresh_thread"])
+	}
+	if binding.Metadata["recovery_mode"] != recoveryModeFresh {
+		t.Fatalf("Load() recovery_mode = %#v, want %q", binding.Metadata["recovery_mode"], recoveryModeFresh)
+	}
+	if fellBackToFresh, _ := binding.Metadata["fell_back_to_fresh"].(bool); fellBackToFresh {
+		t.Fatalf("Load() fell_back_to_fresh = %#v, want false for intentional fresh start", binding.Metadata["fell_back_to_fresh"])
+	}
+}
+
+func TestRunner_ResumeFailureFallsBackToFreshWithSeededInput(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:      "telegram:chat-1:coder",
+		ThreadID: "thr_old",
+		Model:    "gpt-5.4",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	client := &fakeRunnerClient{
+		resumeErrs:      []error{errors.New("resume failed"), errors.New("resume failed again")},
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"fresh"},
+	}
+	runner := NewRunner(client, store)
+
+	got, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "telegram:chat-1:coder",
+		Model:      "gpt-5.4",
+		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Recovery: RecoveryRequest{
+			AllowResume:        true,
+			AllowServerRestart: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	if got.ThreadID != "thr_new" {
+		t.Fatalf("RunTextTurn() thread_id = %q, want %q", got.ThreadID, "thr_new")
+	}
+	if client.resumeCalls != 2 {
+		t.Fatalf("ResumeThread() calls = %d, want %d", client.resumeCalls, 2)
+	}
+	if client.restartCalls != 1 {
+		t.Fatalf("Restart() calls = %d, want %d", client.restartCalls, 1)
+	}
+	if client.runInput != "USER: old\nASSISTANT: old reply\nUSER: current" {
+		t.Fatalf("RunTextTurn() input = %q, want seeded fresh input", client.runInput)
+	}
+
+	binding, ok, err := store.Load("telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected saved binding to remain present")
+	}
+	if binding.Metadata["recovery_mode"] != recoveryModeFresh {
+		t.Fatalf("Load() recovery_mode = %#v, want %q", binding.Metadata["recovery_mode"], recoveryModeFresh)
+	}
+	if restartAttempted, _ := binding.Metadata["restart_attempted"].(bool); !restartAttempted {
+		t.Fatalf("Load() restart_attempted = %#v, want true", binding.Metadata["restart_attempted"])
+	}
+	if resumeAttempted, _ := binding.Metadata["resume_attempted"].(bool); !resumeAttempted {
+		t.Fatalf("Load() resume_attempted = %#v, want true", binding.Metadata["resume_attempted"])
+	}
+	if fellBackToFresh, _ := binding.Metadata["fell_back_to_fresh"].(bool); !fellBackToFresh {
+		t.Fatalf("Load() fell_back_to_fresh = %#v, want true", binding.Metadata["fell_back_to_fresh"])
+	}
+}
+
+func TestRunner_ResumeFallbackPreservesStoredFastEnabledWhenRequestOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:         "telegram:chat-1:coder",
+		ThreadID:    "thr_old",
+		Model:       "gpt-5.4",
+		FastEnabled: true,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	client := &fakeRunnerClient{
+		resumeErrs:      []error{errors.New("resume failed"), errors.New("resume failed again")},
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"fresh"},
+	}
+	runner := NewRunner(client, store)
+
+	_, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "telegram:chat-1:coder",
+		Model:      "gpt-5.4",
+		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Recovery: RecoveryRequest{
+			AllowResume:        true,
+			AllowServerRestart: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	binding, ok, err := store.Load("telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected saved binding to remain present")
+	}
+	if !binding.FastEnabled {
+		t.Fatal("Load() fast_enabled = false, want true")
+	}
+}
+
+func TestRunner_ResumeFallbackClearsStoredFastEnabledWhenRequestExplicitlyDisablesIt(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:         "telegram:chat-1:coder",
+		ThreadID:    "thr_old",
+		Model:       "gpt-5.4",
+		FastEnabled: true,
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	client := &fakeRunnerClient{
+		resumeErrs:      []error{errors.New("resume failed"), errors.New("resume failed again")},
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"fresh"},
+	}
+	runner := NewRunner(client, store)
+
+	_, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "telegram:chat-1:coder",
+		Model:      "gpt-5.4",
+		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Recovery: RecoveryRequest{
+			AllowResume:        true,
+			AllowServerRestart: true,
+		},
+		Control: ControlRequest{
+			FastEnabled:    false,
+			FastEnabledSet: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	binding, ok, err := store.Load("telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected saved binding to remain present")
+	}
+	if binding.FastEnabled {
+		t.Fatal("Load() fast_enabled = true, want false")
 	}
 }
 
@@ -322,16 +588,24 @@ func TestRunner_SetRuntimeControlsPersistBinding(t *testing.T) {
 func TestRunner_ResetThreadClearsOnlyThreadID(t *testing.T) {
 	t.Parallel()
 
+	lastUserMessageAt := time.Date(2026, time.April, 12, 14, 30, 0, 0, time.UTC)
+	lastCompactionAt := time.Date(2026, time.April, 12, 14, 31, 0, 0, time.UTC)
+
 	store := NewBindingStore(t.TempDir())
 	if err := store.Save(Binding{
-		Key:          "telegram:chat-1:coder",
-		ThreadID:     "thr_existing",
-		Model:        "gpt-5.4-mini",
-		ThinkingMode: "high",
-		FastEnabled:  true,
+		Key:               "telegram:chat-1:coder",
+		ThreadID:          "thr_existing",
+		Model:             "gpt-5.4-mini",
+		ThinkingMode:      "high",
+		FastEnabled:       true,
+		LastUserMessageAt: lastUserMessageAt,
 		Metadata: map[string]any{
 			"recovery_mode":      "resumed",
-			"last_compaction_at": time.Now().UTC().Format(time.RFC3339Nano),
+			"restart_attempted":  true,
+			"resume_attempted":   true,
+			"fell_back_to_fresh": true,
+			"force_fresh_thread": true,
+			"last_compaction_at": lastCompactionAt.Format(time.RFC3339Nano),
 		},
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -360,6 +634,18 @@ func TestRunner_ResetThreadClearsOnlyThreadID(t *testing.T) {
 	}
 	if !binding.FastEnabled {
 		t.Fatal("Load() fast_enabled = false, want true")
+	}
+	if !binding.LastUserMessageAt.Equal(lastUserMessageAt) {
+		t.Fatalf("Load() last_user_message_at = %v, want %v", binding.LastUserMessageAt, lastUserMessageAt)
+	}
+	if binding.Metadata["force_fresh_thread"] != nil {
+		t.Fatalf("Load() force_fresh_thread = %#v, want cleared", binding.Metadata["force_fresh_thread"])
+	}
+	if binding.Metadata["recovery_mode"] != nil {
+		t.Fatalf("Load() recovery_mode = %#v, want cleared", binding.Metadata["recovery_mode"])
+	}
+	if binding.Metadata["last_compaction_at"] != nil {
+		t.Fatalf("Load() last_compaction_at = %#v, want cleared", binding.Metadata["last_compaction_at"])
 	}
 }
 
@@ -414,6 +700,44 @@ func TestRunner_ReadStatusMergesBindingAndClientState(t *testing.T) {
 	}
 	if !slices.Equal(status.KnownModels, []string{"gpt-5.4", "gpt-5.4-mini"}) {
 		t.Fatalf("ReadStatus() known_models = %v, want %v", status.KnownModels, []string{"gpt-5.4", "gpt-5.4-mini"})
+	}
+}
+
+func TestRunner_ReadStatusProjectsContinuityMetadata(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 15, 0, 0, 0, time.UTC)
+	lastCompactionAt := now.Add(-2 * time.Minute)
+	store := NewBindingStore(t.TempDir())
+	if err := store.Save(Binding{
+		Key:               "telegram:chat-1:coder",
+		ThreadID:          "thr_existing",
+		Model:             "gpt-5.4",
+		ThinkingMode:      "high",
+		FastEnabled:       true,
+		LastUserMessageAt: now,
+		Metadata: map[string]any{
+			"force_fresh_thread": true,
+			"last_compaction_at": lastCompactionAt.Format(time.RFC3339Nano),
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	runner := NewRunner(&fakeRunnerClient{}, store)
+	status, err := runner.ReadStatus(context.Background(), "telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("ReadStatus() error = %v", err)
+	}
+
+	if !status.ForceFreshThread {
+		t.Fatal("ReadStatus() force_fresh_thread = false, want true")
+	}
+	if !status.LastUserMessageAt.Equal(now) {
+		t.Fatalf("ReadStatus() last_user_message_at = %v, want %v", status.LastUserMessageAt, now)
+	}
+	if !status.LastCompactionAt.Equal(lastCompactionAt) {
+		t.Fatalf("ReadStatus() last_compaction_at = %v, want %v", status.LastCompactionAt, lastCompactionAt)
 	}
 }
 

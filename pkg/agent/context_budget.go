@@ -20,7 +20,7 @@ import (
 func parseTurnBoundaries(history []providers.Message) []int {
 	var starts []int
 	for i, msg := range history {
-		if msg.Role == "user" {
+		if isUserRole(msg.Role) {
 			starts = append(starts, i)
 		}
 	}
@@ -34,7 +34,7 @@ func isSafeBoundary(history []providers.Message, index int) bool {
 	if index <= 0 || index >= len(history) {
 		return true
 	}
-	return history[index].Role == "user"
+	return isUserRole(history[index].Role)
 }
 
 // findSafeBoundary locates the nearest Turn boundary to targetIndex.
@@ -105,13 +105,37 @@ func isOverContextBudget(
 	toolDefs []providers.ToolDefinition,
 	maxTokens int,
 ) bool {
+	return totalContextTokens(messages, toolDefs, maxTokens) > contextWindow
+}
+
+func remainingContextPercent(
+	contextWindow int,
+	messages []providers.Message,
+	toolDefs []providers.ToolDefinition,
+	maxTokens int,
+) int {
+	if contextWindow <= 0 {
+		return 100
+	}
+
+	used := totalContextTokens(messages, toolDefs, maxTokens)
+	remaining := contextWindow - used
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	return (remaining * 100) / contextWindow
+}
+
+func totalContextTokens(
+	messages []providers.Message,
+	toolDefs []providers.ToolDefinition,
+	maxTokens int,
+) int {
 	msgTokens := 0
 	for _, m := range messages {
 		msgTokens += EstimateMessageTokens(m)
 	}
 
-	toolTokens := EstimateToolDefsTokens(toolDefs)
-	total := msgTokens + toolTokens + maxTokens
-
-	return total > contextWindow
+	return msgTokens + EstimateToolDefsTokens(toolDefs) + maxTokens
 }
