@@ -9,7 +9,7 @@
 - [Core Primitives](#core-primitives)
 - [Lifecycle Overview](#lifecycle-overview)
 
-For the remaining sections, see the index: [codex-app-serv.md](./codex-app-serv.md).
+For the remaining sections, see the index: [official-summary.md](./official-summary.md).
 
 ## Protocol
 
