@@ -18,8 +18,8 @@ func switchCommand() Definition {
 					if rt == nil || (rt.SetModel == nil && rt.SwitchModel == nil) {
 						return req.Reply(unavailableMsg)
 					}
-					// Parse: /switch model to <value>
-					value := nthToken(req.Text, 3) // tokens: [/switch, model, to, <value>]
+					// Parse: /switch model to <name>
+					value := nthToken(req.Text, 3)
 					if nthToken(req.Text, 2) != "to" || value == "" {
 						return req.Reply("Usage: /switch model to <name>")
 					}

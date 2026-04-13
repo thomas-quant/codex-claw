@@ -4,11 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
-	"github.com/sipeed/picoclaw/pkg/gateway"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
 func NewGatewayCommand() *cobra.Command {
@@ -26,15 +21,10 @@ func NewGatewayCommand() *cobra.Command {
 				return fmt.Errorf("the --no-truncate option can only be used in conjunction with --debug (-d)")
 			}
 
-			if noTruncate {
-				utils.SetDisableTruncation(true)
-				logger.Info("String truncation is globally disabled via 'no-truncate' flag")
-			}
-
 			return nil
 		},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return gateway.Run(debug, internal.GetPicoclawHome(), internal.GetConfigPath(), allowEmpty)
+			return fmt.Errorf("gateway runtime is not available in this build")
 		},
 	}
 

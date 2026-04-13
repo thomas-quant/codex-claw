@@ -14,8 +14,13 @@ func showCommand() Definition {
 				Name:        "model",
 				Description: "Current model and provider",
 				Handler: func(_ context.Context, req Request, rt *Runtime) error {
-					name, provider, ok := runtimeCurrentModel(rt)
-					if !ok {
+					if rt == nil || rt.ReadStatus == nil {
+						return req.Reply(unavailableMsg)
+					}
+					status := rt.ReadStatus()
+					name := status.Model
+					provider := status.Provider
+					if name == "" {
 						return req.Reply(unavailableMsg)
 					}
 					if provider == "" {

@@ -38,11 +38,9 @@ func TestNewPicoclawCommand(t *testing.T) {
 
 	allowedCommands := []string{
 		"agent",
-		"auth",
 		"cron",
 		"gateway",
 		"migrate",
-		"model",
 		"onboard",
 		"skills",
 		"status",

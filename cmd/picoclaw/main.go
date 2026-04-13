@@ -15,12 +15,10 @@ import (
 
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/agent"
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/auth"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/cliui"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/cron"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/gateway"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/migrate"
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/model"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/onboard"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/skills"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/status"
@@ -83,13 +81,11 @@ picoclaw --no-color status`,
 	cmd.AddCommand(
 		onboard.NewOnboardCommand(),
 		agent.NewAgentCommand(),
-		auth.NewAuthCommand(),
 		gateway.NewGatewayCommand(),
 		status.NewStatusCommand(),
 		cron.NewCronCommand(),
 		migrate.NewMigrateCommand(),
 		skills.NewSkillsCommand(),
-		model.NewModelCommand(),
 		updater.NewUpdateCommand("picoclaw"),
 		version.NewVersionCommand(),
 	)
