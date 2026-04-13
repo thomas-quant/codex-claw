@@ -31,6 +31,13 @@ The fork is Codex-first. `runtime.codex` sets the default Codex model and turn b
 
 `runtime.fallback.deepseek` is the only built-in fallback path. It carries the model id and API base only. DeepSeek auth should come from your external secret or env setup, not from `config.json`.
 
+Legacy fallback arrays are no longer part of the runtime contract. The following fields are still parseable for compatibility, but PicoClaw warns and ignores them:
+
+- `agents.defaults.model_fallbacks`
+- `agents.defaults.image_model_fallbacks`
+- structured `model.fallbacks`
+- structured `subagents.model.fallbacks`
+
 Codex auth is not configured here at all. `codex app-server` is expected to start inside an already-authenticated environment.
 
 ## Agents
@@ -40,6 +47,8 @@ Keep using the existing agent backbone:
 - `agents.defaults.workspace` sets the main workspace root
 - AGENT/frontmatter `model` stays a raw Codex model id such as `gpt-5.4-mini`
 - per-thread runtime commands can override model, thinking, and `fast` without changing static config
+
+Do not rely on fallback arrays in agent config. Active fallback behavior is runtime-owned rather than configured through legacy `fallbacks` lists.
 
 Example:
 

@@ -36,6 +36,15 @@ Checks:
 
 If a live Codex turn fails for some other reason, fallback is intentionally not automatic.
 
+If you configured any of these legacy fields, they will not activate fallback behavior:
+
+- `agents.defaults.model_fallbacks`
+- `agents.defaults.image_model_fallbacks`
+- structured `model.fallbacks`
+- structured `subagents.model.fallbacks`
+
+Current builds keep those fields parseable for compatibility, but they log a deprecation warning and are ignored.
+
 ## Telegram or Discord will not connect
 
 Checks:

@@ -174,7 +174,7 @@ func TestAgentInstance_Model(t *testing.T) {
 	}
 }
 
-func TestAgentInstance_FallbackInheritance(t *testing.T) {
+func TestAgentInstance_IgnoresDeprecatedDefaultFallbacks(t *testing.T) {
 	cfg := testCfg([]config.AgentConfig{
 		{ID: "inherit", Default: true},
 	})
@@ -182,15 +182,18 @@ func TestAgentInstance_FallbackInheritance(t *testing.T) {
 	registry := NewAgentRegistry(cfg, &mockRegistryProvider{})
 
 	agent, _ := registry.GetAgent("inherit")
-	if len(agent.Fallbacks) != 2 {
-		t.Errorf("expected 2 fallbacks inherited from defaults, got %d", len(agent.Fallbacks))
+	if len(agent.Fallbacks) != 0 {
+		t.Fatalf("Fallbacks = %v, want deprecated defaults.model_fallbacks to be ignored", agent.Fallbacks)
+	}
+	if len(agent.Candidates) != 1 {
+		t.Fatalf("len(Candidates) = %d, want only the primary model candidate", len(agent.Candidates))
 	}
 }
 
-func TestAgentInstance_FallbackExplicitEmpty(t *testing.T) {
+func TestAgentInstance_IgnoresDeprecatedStructuredFallbacks(t *testing.T) {
 	model := &config.AgentModelConfig{
 		Primary:   "gpt-4",
-		Fallbacks: []string{}, // explicitly empty = disable
+		Fallbacks: []string{"anthropic/haiku"},
 	}
 	cfg := testCfg([]config.AgentConfig{
 		{ID: "no-fallback", Default: true, Model: model},
@@ -200,6 +203,12 @@ func TestAgentInstance_FallbackExplicitEmpty(t *testing.T) {
 
 	agent, _ := registry.GetAgent("no-fallback")
 	if len(agent.Fallbacks) != 0 {
-		t.Errorf("expected 0 fallbacks (explicit empty), got %d: %v", len(agent.Fallbacks), agent.Fallbacks)
+		t.Fatalf("Fallbacks = %v, want deprecated structured model.fallbacks to be ignored", agent.Fallbacks)
+	}
+	if len(agent.Candidates) != 1 {
+		t.Fatalf("len(Candidates) = %d, want only the explicit primary model candidate", len(agent.Candidates))
+	}
+	if agent.Candidates[0].Provider != "codex" || agent.Candidates[0].Model != "gpt-4" {
+		t.Fatalf("Candidates[0] = %+v, want codex/gpt-4", agent.Candidates[0])
 	}
 }

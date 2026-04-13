@@ -340,12 +340,13 @@ func resolveAgentModel(agentCfg *config.AgentConfig, defaults *config.AgentDefau
 	return defaults.GetModelName()
 }
 
-// resolveAgentFallbacks resolves the fallback models for an agent.
+// resolveAgentFallbacks keeps legacy fallback arrays parseable but ignored.
+// Runtime-owned fallback behavior is configured elsewhere and should not be
+// extended by deprecated config fields.
 func resolveAgentFallbacks(agentCfg *config.AgentConfig, defaults *config.AgentDefaults) []string {
-	if agentCfg != nil && agentCfg.Model != nil && agentCfg.Model.Fallbacks != nil {
-		return agentCfg.Model.Fallbacks
-	}
-	return defaults.ModelFallbacks
+	_ = agentCfg
+	_ = defaults
+	return nil
 }
 
 func compilePatterns(patterns []string) []*regexp.Regexp {

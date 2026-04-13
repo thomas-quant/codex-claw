@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
 func TestAgentModelConfig_UnmarshalString(t *testing.T) {
@@ -164,6 +166,72 @@ func TestAgentConfig_FullParse(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_DeprecatesLegacyFallbackFields(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	raw := `{
+		"agents": {
+			"defaults": {
+				"workspace": "~/.picoclaw/workspace",
+				"model_fallbacks": ["gpt-5.4-mini"],
+				"image_model_fallbacks": ["gpt-image-1-mini"]
+			},
+			"list": [
+				{
+					"id": "support",
+					"model": {
+						"primary": "gpt-5.4",
+						"fallbacks": ["deepseek-chat"]
+					},
+					"subagents": {
+						"model": {
+							"primary": "gpt-5.4-mini",
+							"fallbacks": ["deepseek-chat"]
+						}
+					}
+				}
+			]
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(raw), 0o644); err != nil {
+		t.Fatalf("WriteFile(configPath): %v", err)
+	}
+
+	logOutput := captureWarnLogOutput(t, func() {
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error: %v", err)
+		}
+
+		if len(cfg.Agents.Defaults.ModelFallbacks) != 1 || cfg.Agents.Defaults.ModelFallbacks[0] != "gpt-5.4-mini" {
+			t.Fatalf("Agents.Defaults.ModelFallbacks = %v, want deprecated field to remain parseable", cfg.Agents.Defaults.ModelFallbacks)
+		}
+		if len(cfg.Agents.Defaults.ImageModelFallbacks) != 1 || cfg.Agents.Defaults.ImageModelFallbacks[0] != "gpt-image-1-mini" {
+			t.Fatalf("Agents.Defaults.ImageModelFallbacks = %v, want deprecated field to remain parseable", cfg.Agents.Defaults.ImageModelFallbacks)
+		}
+
+		agentCfg := cfg.Agents.List[0]
+		if agentCfg.Model == nil || len(agentCfg.Model.Fallbacks) != 1 || agentCfg.Model.Fallbacks[0] != "deepseek-chat" {
+			t.Fatalf("agent model fallbacks = %v, want deprecated field to remain parseable", agentCfg.Model)
+		}
+		if agentCfg.Subagents == nil || agentCfg.Subagents.Model == nil || len(agentCfg.Subagents.Model.Fallbacks) != 1 {
+			t.Fatalf("subagents model fallbacks = %+v, want deprecated field to remain parseable", agentCfg.Subagents)
+		}
+	})
+
+	for _, needle := range []string{
+		"agents.defaults.model_fallbacks",
+		"agents.defaults.image_model_fallbacks",
+		"agents.list[support].model.fallbacks",
+		"agents.list[support].subagents.model.fallbacks",
+		"deprecated fallback config is ignored",
+	} {
+		if !strings.Contains(logOutput, needle) {
+			t.Fatalf("log output missing %q\nfull log:\n%s", needle, logOutput)
+		}
+	}
+}
+
 func TestDefaultConfig_MCPMaxInlineTextChars(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Tools.MCP.GetMaxInlineTextChars() != DefaultMCPMaxInlineTextChars {
@@ -173,6 +241,31 @@ func TestDefaultConfig_MCPMaxInlineTextChars(t *testing.T) {
 			DefaultMCPMaxInlineTextChars,
 		)
 	}
+}
+
+func captureWarnLogOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	initialLevel := logger.GetLevel()
+	logger.DisableFileLogging()
+	logger.SetLevel(logger.WARN)
+
+	logPath := filepath.Join(t.TempDir(), "picoclaw.log")
+	if err := logger.EnableFileLogging(logPath); err != nil {
+		t.Fatalf("EnableFileLogging() error: %v", err)
+	}
+	t.Cleanup(func() {
+		logger.DisableFileLogging()
+		logger.SetLevel(initialLevel)
+	})
+
+	fn()
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(logPath): %v", err)
+	}
+	return string(data)
 }
 
 func TestLoadConfig_MCPMaxInlineTextChars(t *testing.T) {

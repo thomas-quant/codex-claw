@@ -9,6 +9,8 @@ This fork keeps two model paths:
 
 Everything else from the old provider matrix is removed.
 
+Legacy fallback arrays such as `model_fallbacks`, `image_model_fallbacks`, `model.fallbacks`, and `subagents.model.fallbacks` are deprecated. PicoClaw may still parse them for compatibility, but the runtime ignores them.
+
 ## Codex
 
 Codex is the default runtime. Bare model ids are treated as Codex models in the forked runtime, so agent config can stay simple:
@@ -58,6 +60,8 @@ The runtime reads `DEEPSEEK_API_KEY` from the environment when building the fall
 - `agents.defaults.model_name` can still seed startup behavior during the transition
 - AGENT/frontmatter `model` is the preferred per-agent override
 - per-thread commands such as `/set model`, `/set thinking`, and `/fast` override both until changed again
+
+Those overrides do not create a configurable fallback chain. Automatic fallback remains runtime-owned, with Codex primary and the optional DeepSeek path above.
 
 ## Voice Note
 

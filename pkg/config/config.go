@@ -843,7 +843,42 @@ func loadConfig(data []byte) (*Config, error) {
 		return nil, err
 	}
 
+	warnDeprecatedFallbackConfig(cfg)
+
 	return cfg, nil
+}
+
+func warnDeprecatedFallbackConfig(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	warnField := func(field string) {
+		logger.WarnCF("config", "deprecated fallback config is ignored; runtime fallback is runtime-owned", map[string]any{
+			"field": field,
+		})
+	}
+
+	if cfg.Agents.Defaults.ModelFallbacks != nil {
+		warnField("agents.defaults.model_fallbacks")
+	}
+	if cfg.Agents.Defaults.ImageModelFallbacks != nil {
+		warnField("agents.defaults.image_model_fallbacks")
+	}
+
+	for i, agentCfg := range cfg.Agents.List {
+		agentRef := fmt.Sprintf("%d", i)
+		if id := strings.TrimSpace(agentCfg.ID); id != "" {
+			agentRef = id
+		}
+
+		if agentCfg.Model != nil && agentCfg.Model.Fallbacks != nil {
+			warnField(fmt.Sprintf("agents.list[%s].model.fallbacks", agentRef))
+		}
+		if agentCfg.Subagents != nil && agentCfg.Subagents.Model != nil && agentCfg.Subagents.Model.Fallbacks != nil {
+			warnField(fmt.Sprintf("agents.list[%s].subagents.model.fallbacks", agentRef))
+		}
+	}
 }
 
 func rejectLegacyConfigData(data []byte) error {

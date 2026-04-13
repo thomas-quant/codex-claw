@@ -297,7 +297,7 @@ func TestPopulateCandidateProviders_EmptyNamesIsNoop(t *testing.T) {
 	}
 }
 
-func TestNewAgentInstance_CandidateProvidersPopulatedForConfiguredFallbacks(t *testing.T) {
+func TestNewAgentInstance_IgnoresDeprecatedConfiguredFallbacks(t *testing.T) {
 	workspace := t.TempDir()
 
 	cfg := config.DefaultConfig()
@@ -308,40 +308,28 @@ func TestNewAgentInstance_CandidateProvidersPopulatedForConfiguredFallbacks(t *t
 	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
 	cfg.Runtime.Fallback.DeepSeek.APIBase = "https://api.deepseek.com/v1"
 
-	primaryProvider := &mockProvider{}
-	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, primaryProvider)
+	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, &mockProvider{})
 
-	wantKeys := []string{
+	if len(agent.Fallbacks) != 0 {
+		t.Fatalf("Fallbacks = %v, want deprecated fallback arrays to be ignored", agent.Fallbacks)
+	}
+	if len(agent.Candidates) != 1 {
+		t.Fatalf("len(Candidates) = %d, want 1 primary candidate", len(agent.Candidates))
+	}
+
+	deprecatedKeys := []string{
 		providers.ModelKey("codex", "gpt-5.4-mini"),
 		providers.ModelKey("deepseek", "deepseek-chat"),
 	}
 
-	for _, key := range wantKeys {
-		p, ok := agent.CandidateProviders[key]
-		if !ok {
-			t.Errorf("CandidateProviders missing key %q", key)
-			continue
-		}
-		if p == nil {
-			t.Errorf("CandidateProviders[%q] is nil", key)
-		}
-		// Each fallback must use its own provider, not the injected primary.
-		if p == primaryProvider {
-			t.Errorf(
-				"CandidateProviders[%q] is the same instance as the primary provider; fallback would inherit primary credentials",
-				key,
-			)
+	for _, key := range deprecatedKeys {
+		if _, ok := agent.CandidateProviders[key]; ok {
+			t.Fatalf("CandidateProviders[%q] should not be populated from deprecated fallback config", key)
 		}
 	}
 
-	if t.Failed() {
-		t.Logf("CandidateProviders keys present: %v", func() []string {
-			keys := make([]string, 0, len(agent.CandidateProviders))
-			for k := range agent.CandidateProviders {
-				keys = append(keys, k)
-			}
-			return keys
-		}())
+	if agent.DeepSeekFallback == nil {
+		t.Fatal("DeepSeekFallback = nil, want runtime fallback provider to remain configured")
 	}
 }
 
