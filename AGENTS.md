@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`cmd/codex-claw` contains the main Cobra CLI source for the `codex-claw` binary, and `cmd/membench` is the benchmark tool. Core runtime code lives under `pkg/`, with domain packages such as `agent`, `channels`, `commands`, `config`, `credential`, `memory`, `providers`, `session`, and `tools`; tests live beside the code. Operator docs live in `docs/`, archived notes in `docs/history/`, planning artifacts in `.planning/`, reference material in `reference/`, and companion tooling in `support/`. Use `config/config.example.json` and `workspace/` as the reference for operator config and bundled agent files. Localized channel docs live next to the English channel guides under `docs/channels/`.
+`cmd/codex-claw` contains the main Cobra CLI source for the `codex-claw` binary, and `cmd/membench` is the benchmark tool. The Go module path is `github.com/thomas-quant/codex-claw`. Core runtime code lives under `pkg/`, with domain packages such as `agent`, `channels`, `commands`, `config`, `credential`, `memory`, `providers`, `session`, and `tools`; tests live beside the code. Operator docs live in `docs/`, archived notes in `docs/history/`, planning artifacts in `.planning/`, reference material in `reference/`, and companion tooling in `support/`. Use `config/config.example.json` and `workspace/` as the reference for operator config and bundled agent files; built-in workspace skills live under `workspace/skills/`. Localized channel docs live next to the English channel guides under `docs/channels/`.
 
 ## Build, Test, and Development Commands
 Use the root `Makefile` first:
