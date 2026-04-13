@@ -15,6 +15,7 @@ func TestEnableSubcommand(t *testing.T) {
 
 	assert.Equal(t, "enable", cmd.Use)
 	assert.Equal(t, "Enable a job", cmd.Short)
+	assert.Equal(t, "codex-claw cron enable 1", cmd.Example)
 
 	assert.True(t, cmd.HasExample())
 }

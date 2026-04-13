@@ -19,6 +19,8 @@ func TestNewInstallSubcommand(t *testing.T) {
 	assert.NotNil(t, cmd.RunE)
 
 	assert.True(t, cmd.HasExample())
+	assert.Contains(t, cmd.Example, "codex-claw skills install owner/repo/skills/weather")
+	assert.Contains(t, cmd.Example, "codex-claw skills install --registry clawhub github")
 	assert.False(t, cmd.HasSubCommands())
 
 	assert.True(t, cmd.HasFlags())

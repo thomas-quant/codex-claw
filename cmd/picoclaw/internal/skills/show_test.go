@@ -14,6 +14,7 @@ func TestNewShowSubcommand(t *testing.T) {
 
 	assert.Equal(t, "show", cmd.Use)
 	assert.Equal(t, "Show skill details", cmd.Short)
+	assert.Equal(t, "codex-claw skills show weather", cmd.Example)
 
 	assert.Nil(t, cmd.Run)
 	assert.NotNil(t, cmd.RunE)

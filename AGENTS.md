@@ -1,12 +1,12 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`cmd/picoclaw` is the main Cobra CLI and `cmd/membench` is the benchmark tool. Core runtime code lives under `pkg/`, with domain packages such as `agent`, `channels`, `commands`, `config`, `credential`, `memory`, `providers`, `session`, and `tools`; tests live beside the code. Operator docs live in `docs/`, archived notes in `docs/history/`, planning artifacts in `.planning/`, reference material in `reference/`, and companion tooling in `support/`. Use `config/config.example.json` and `workspace/` as the reference for operator config and bundled agent files. Localized channel docs live next to the English channel guides under `docs/channels/`.
+`cmd/picoclaw` contains the main Cobra CLI source for the `codex-claw` binary, and `cmd/membench` is the benchmark tool. Core runtime code lives under `pkg/`, with domain packages such as `agent`, `channels`, `commands`, `config`, `credential`, `memory`, `providers`, `session`, and `tools`; tests live beside the code. Operator docs live in `docs/`, archived notes in `docs/history/`, planning artifacts in `.planning/`, reference material in `reference/`, and companion tooling in `support/`. Use `config/config.example.json` and `workspace/` as the reference for operator config and bundled agent files. Localized channel docs live next to the English channel guides under `docs/channels/`.
 
 ## Build, Test, and Development Commands
 Use the root `Makefile` first:
 
-- `make build`: build the main `picoclaw` binary.
+- `make build`: build the main `codex-claw` binary.
 - `make test`: run `go generate` and the tagged Go test suite.
 - `make vet`, `make lint`, `make fmt`, `make fix`, `make check`: static analysis, formatting, autofix, and full verification.
 - `make build-all`: build release binaries for the supported target set.

@@ -68,6 +68,12 @@ CODEX_CLAW_HOME?=$(HOME)/.codex-claw
 WORKSPACE_DIR?=$(CODEX_CLAW_HOME)/workspace
 WORKSPACE_SKILLS_DIR=$(WORKSPACE_DIR)/skills
 BUILTIN_SKILLS_DIR=$(CURDIR)/skills
+DOCKER_COMPOSE_MIN?=docker/docker-compose.yml
+DOCKER_COMPOSE_FULL?=docker/docker-compose.full.yml
+DOCKER_AGENT_SERVICE?=codex-claw-agent
+DOCKER_GATEWAY_SERVICE?=codex-claw-gateway
+DOCKER_IMAGE_MIN?=codex-claw:latest
+DOCKER_IMAGE_FULL?=codex-claw:full
 
 LNCMD=ln -sf
 
@@ -265,12 +271,12 @@ run: build
 ## docker-build: Build Docker image (minimal Alpine-based)
 docker-build:
 	@echo "Building minimal Docker image (Alpine-based)..."
-	docker compose -f docker/docker-compose.yml build picoclaw-agent picoclaw-gateway
+	docker compose -f $(DOCKER_COMPOSE_MIN) build $(DOCKER_AGENT_SERVICE) $(DOCKER_GATEWAY_SERVICE)
 
 ## docker-build-full: Build Docker image with full MCP support (Node.js 24)
 docker-build-full:
 	@echo "Building full-featured Docker image (Node.js 24)..."
-	docker compose -f docker/docker-compose.full.yml build picoclaw-agent picoclaw-gateway
+	docker compose -f $(DOCKER_COMPOSE_FULL) build $(DOCKER_AGENT_SERVICE) $(DOCKER_GATEWAY_SERVICE)
 
 ## docker-test: Test MCP tools in Docker container
 docker-test:
@@ -280,25 +286,25 @@ docker-test:
 
 ## docker-run: Run codex-claw gateway in Docker (Alpine-based)
 docker-run:
-	docker compose -f docker/docker-compose.yml --profile gateway up
+	docker compose -f $(DOCKER_COMPOSE_MIN) --profile gateway up
 
 ## docker-run-full: Run codex-claw gateway in Docker (full-featured)
 docker-run-full:
-	docker compose -f docker/docker-compose.full.yml --profile gateway up
+	docker compose -f $(DOCKER_COMPOSE_FULL) --profile gateway up
 
 ## docker-run-agent: Run codex-claw agent in Docker (interactive, Alpine-based)
 docker-run-agent:
-	docker compose -f docker/docker-compose.yml run --rm picoclaw-agent
+	docker compose -f $(DOCKER_COMPOSE_MIN) run --rm $(DOCKER_AGENT_SERVICE)
 
 ## docker-run-agent-full: Run codex-claw agent in Docker (interactive, full-featured)
 docker-run-agent-full:
-	docker compose -f docker/docker-compose.full.yml run --rm picoclaw-agent
+	docker compose -f $(DOCKER_COMPOSE_FULL) run --rm $(DOCKER_AGENT_SERVICE)
 
 ## docker-clean: Clean Docker images and volumes
 docker-clean:
-	docker compose -f docker/docker-compose.yml down -v
-	docker compose -f docker/docker-compose.full.yml down -v
-	docker rmi picoclaw:latest picoclaw:full 2>/dev/null || true
+	docker compose -f $(DOCKER_COMPOSE_MIN) down -v
+	docker compose -f $(DOCKER_COMPOSE_FULL) down -v
+	docker rmi $(DOCKER_IMAGE_MIN) $(DOCKER_IMAGE_FULL) 2>/dev/null || true
 
 
 ## mem: Build membench, download LOCOMO data (if needed), run benchmark, and show results

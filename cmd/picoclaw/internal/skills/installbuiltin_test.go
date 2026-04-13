@@ -14,6 +14,7 @@ func TestNewInstallbuiltinSubcommand(t *testing.T) {
 
 	assert.Equal(t, "install-builtin", cmd.Use)
 	assert.Equal(t, "Install all builtin skills to workspace", cmd.Short)
+	assert.Equal(t, "codex-claw skills install-builtin", cmd.Example)
 
 	assert.Nil(t, cmd.Run)
 	assert.NotNil(t, cmd.RunE)

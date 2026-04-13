@@ -25,9 +25,15 @@ func main() {
 	// Suppress seahorse INFO logs during benchmark
 	logger.SetLevel(logger.WARN)
 
+	if err := newRootCommand().Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "membench",
-		Short: "Memory benchmark tool for picoclaw",
+		Short: "Memory benchmark tool for codex-claw",
 	}
 
 	ingestCmd := &cobra.Command{
@@ -68,9 +74,7 @@ func main() {
 
 	rootCmd.AddCommand(ingestCmd, evalCmd, reportCmd, runCmd)
 
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	return rootCmd
 }
 
 func modesFromFlag() []string {

@@ -16,8 +16,8 @@ func newInstallCommand(installerFn func() (*skills.SkillInstaller, error)) *cobr
 		Use:   "install",
 		Short: "Install skill from GitHub",
 		Example: `
-picoclaw skills install sipeed/picoclaw-skills/weather
-picoclaw skills install --registry clawhub github
+codex-claw skills install owner/repo/skills/weather
+codex-claw skills install --registry clawhub github
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if registry != "" {

@@ -14,6 +14,7 @@ func TestNewListSubcommand(t *testing.T) {
 
 	assert.Equal(t, "list", cmd.Use)
 	assert.Equal(t, "List installed skills", cmd.Short)
+	assert.Equal(t, "codex-claw skills list", cmd.Example)
 
 	assert.Nil(t, cmd.Run)
 	assert.NotNil(t, cmd.RunE)

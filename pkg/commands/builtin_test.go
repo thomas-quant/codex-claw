@@ -188,3 +188,26 @@ func TestBuiltinUseCommand_PassthroughsToAgentLogic(t *testing.T) {
 		t.Fatalf("/use command=%q, want=%q", res.Command, "use")
 	}
 }
+
+func TestBuiltinStartReply_UsesCodexClawIdentity(t *testing.T) {
+	defs := BuiltinDefinitions()
+	startDef := findDefinitionByName(t, defs, "start")
+	if startDef.Handler == nil {
+		t.Fatalf("/start handler should not be nil")
+	}
+
+	var reply string
+	err := startDef.Handler(context.Background(), Request{
+		Text: "/start",
+		Reply: func(text string) error {
+			reply = text
+			return nil
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("/start handler error: %v", err)
+	}
+	if reply != "Hello! I am Codex Claw 🦞" {
+		t.Fatalf("/start reply=%q, want %q", reply, "Hello! I am Codex Claw 🦞")
+	}
+}

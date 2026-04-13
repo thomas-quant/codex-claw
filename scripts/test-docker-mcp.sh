@@ -3,8 +3,13 @@
 
 set -e
 
-COMPOSE_FILE="docker/docker-compose.full.yml"
-SERVICE="picoclaw-agent"
+COMPOSE_FILE="${COMPOSE_FILE:-docker/docker-compose.full.yml}"
+SERVICE="${SERVICE:-codex-claw-agent}"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "Missing compose file: $COMPOSE_FILE"
+    exit 1
+fi
 
 echo "🧪 Testing MCP tools in Docker container (full-featured image)..."
 echo ""

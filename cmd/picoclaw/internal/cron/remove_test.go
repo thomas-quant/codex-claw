@@ -14,6 +14,7 @@ func TestNewRemoveSubcommand(t *testing.T) {
 	require.NotNil(t, cmd)
 
 	assert.Equal(t, "Remove a job by ID", cmd.Short)
+	assert.Equal(t, "codex-claw cron remove 1", cmd.Example)
 
 	assert.True(t, cmd.HasExample())
 }

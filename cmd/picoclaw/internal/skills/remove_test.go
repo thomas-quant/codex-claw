@@ -14,6 +14,7 @@ func TestNewRemoveSubcommand(t *testing.T) {
 
 	assert.Equal(t, "remove", cmd.Use)
 	assert.Equal(t, "Remove installed skill", cmd.Short)
+	assert.Equal(t, "codex-claw skills remove weather", cmd.Example)
 
 	assert.Nil(t, cmd.Run)
 	assert.NotNil(t, cmd.RunE)

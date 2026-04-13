@@ -14,6 +14,7 @@ func TestNewListbuiltinSubcommand(t *testing.T) {
 
 	assert.Equal(t, "list-builtin", cmd.Use)
 	assert.Equal(t, "List available builtin skills", cmd.Short)
+	assert.Equal(t, "codex-claw skills list-builtin", cmd.Example)
 
 	assert.NotNil(t, cmd.Run)
 
