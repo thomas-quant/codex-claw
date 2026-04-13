@@ -257,6 +257,7 @@ For schedule types, execution modes (`deliver`, agent turn, and command jobs), p
 ## MCP Tool
 
 The MCP tool enables integration with external Model Context Protocol servers.
+MCP servers still start from the global `tools.mcp` configuration, but tool exposure is decided per agent: only agents with an `mcpServers` allowlist receive MCP tools and discovery/search support.
 
 ### Tool Discovery (Lazy Loading)
 
@@ -279,7 +280,7 @@ and injected into the context for a configured number of turns (`ttl`).
 
 | Config               | Type | Default | Description                                                                                                                       |
 |----------------------|------|---------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `enabled`            | bool | false   | Global default: if `true`, all MCP tools are hidden and loaded on-demand via search; if `false`, all tools are loaded into context. Individual servers can override this with the per-server `deferred` field. |
+| `enabled`            | bool | false   | Global default: if `true`, MCP tools stay hidden and load on demand via search; if `false`, they load into context. This only applies inside agents that already opted into MCP via `mcpServers`. Individual servers can override this with the per-server `deferred` field. |
 | `ttl`                | int  | 5       | Number of conversational turns a discovered tool remains unlocked                                                                 |
 | `max_search_results` | int  | 5       | Maximum number of tools returned per search query                                                                                 |
 | `use_bm25`           | bool | true    | Enable the natural language/keyword search tool (`tool_search_tool_bm25`). **Warning**: consumes more resources than regex search |
@@ -395,17 +396,14 @@ dynamically only when requested by the user.*
             "postgresql://user:password@localhost/dbname"
           ]
         },
-        "slack": {
+        "filesystem": {
           "enabled": true,
           "command": "npx",
           "args": [
             "-y",
-            "@modelcontextprotocol/server-slack"
-          ],
-          "env": {
-            "SLACK_BOT_TOKEN": "YOUR_SLACK_BOT_TOKEN",
-            "SLACK_TEAM_ID": "YOUR_SLACK_TEAM_ID"
-          }
+            "@modelcontextprotocol/server-filesystem",
+            "/tmp"
+          ]
         }
       }
     }
