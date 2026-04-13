@@ -294,11 +294,33 @@ func TestDefaultConfig_Channels(t *testing.T) {
 	if cfg.Channels.Discord.Enabled {
 		t.Error("Discord should be disabled by default")
 	}
-	if cfg.Channels.Slack.Enabled {
-		t.Error("Slack should be disabled by default")
+
+	data, err := json.Marshal(cfg.Channels)
+	if err != nil {
+		t.Fatalf("json.Marshal(cfg.Channels) failed: %v", err)
 	}
-	if cfg.Channels.Matrix.Enabled {
-		t.Error("Matrix should be disabled by default")
+
+	for _, deadKey := range []string{
+		`"whatsapp"`,
+		`"feishu"`,
+		`"maixcam"`,
+		`"qq"`,
+		`"dingtalk"`,
+		`"slack"`,
+		`"matrix"`,
+		`"line"`,
+		`"onebot"`,
+		`"wecom"`,
+		`"weixin"`,
+		`"pico"`,
+		`"pico_client"`,
+		`"irc"`,
+		`"vk"`,
+		`"teams_webhook"`,
+	} {
+		if strings.Contains(string(data), deadKey) {
+			t.Fatalf("default channels should not serialize removed channel key %s: %s", deadKey, string(data))
+		}
 	}
 }
 
@@ -1220,24 +1242,6 @@ func TestFilterSensitiveData_AllTokenTypes(t *testing.T) {
 		Channels: ChannelsConfig{
 			Telegram: TelegramConfig{Token: *NewSecureString("telegram-bot-token-abcdef")},
 			Discord:  DiscordConfig{Token: *NewSecureString("discord-bot-token-xyz789")},
-			Slack: SlackConfig{
-				BotToken: *NewSecureString("xoxb-slack-bot-token"),
-				AppToken: *NewSecureString("xapp-slack-app-token"),
-			},
-			Matrix: MatrixConfig{AccessToken: *NewSecureString("matrix-access-token-abc")},
-			Feishu: FeishuConfig{
-				AppSecret:  *NewSecureString("feishu-app-secret-123"),
-				EncryptKey: *NewSecureString("feishu-encrypt-key"),
-			},
-			DingTalk: DingTalkConfig{ClientSecret: *NewSecureString("dingtalk-client-secret")},
-			OneBot:   OneBotConfig{AccessToken: *NewSecureString("onebot-access-token")},
-			WeCom:    WeComConfig{Secret: *NewSecureString("wecom-secret")},
-			Pico:     PicoConfig{Token: *NewSecureString("pico-token-abc123")},
-			IRC: IRCConfig{
-				Password:         *NewSecureString("irc-password"),
-				NickServPassword: *NewSecureString("nickserv-pass"),
-				SASLPassword:     *NewSecureString("sasl-pass"),
-			},
 		},
 		Tools: ToolsConfig{
 			FilterSensitiveData: true,
@@ -1276,16 +1280,6 @@ func TestFilterSensitiveData_AllTokenTypes(t *testing.T) {
 			want:    "Discord token: [FILTERED]",
 		},
 		{
-			name:    "slack_tokens",
-			content: "Slack bot: xoxb-slack-bot-token, app: xapp-slack-app-token",
-			want:    "Slack bot: [FILTERED], app: [FILTERED]",
-		},
-		{
-			name:    "matrix_token",
-			content: "Matrix access token: matrix-access-token-abc",
-			want:    "Matrix access token: [FILTERED]",
-		},
-		{
 			name:    "brave_api_key",
 			content: "Brave key: brave-api-key",
 			want:    "Brave key: [FILTERED]",
@@ -1299,11 +1293,6 @@ func TestFilterSensitiveData_AllTokenTypes(t *testing.T) {
 			name:    "github_token",
 			content: "GitHub token: github-token-xyz",
 			want:    "GitHub token: [FILTERED]",
-		},
-		{
-			name:    "irc_passwords",
-			content: "IRC password: irc-password, nickserv: nickserv-pass",
-			want:    "IRC password: [FILTERED], nickserv: [FILTERED]",
 		},
 		{
 			name:    "mixed_content",

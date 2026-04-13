@@ -19,7 +19,9 @@ type RecoveryRequest struct {
 type ControlRequest struct {
 	ThinkingMode      string
 	FastEnabled       bool
+	FastEnabledSet    bool
 	LastUserMessageAt string
+	ForceFreshThread  bool
 }
 
 type RunRequest struct {
@@ -72,11 +74,11 @@ func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, er
 	recoveryMode := recoveryModeFresh
 	resumeAttempted := false
 	restartAttempted := false
-	allowResume := true
-	if !req.Recovery.AllowResume && req.Recovery.AllowServerRestart {
-		allowResume = false
-	}
+	allowResume := req.Recovery.AllowResume && !req.Control.ForceFreshThread
 
+	if ok && threadID != "" && !allowResume {
+		threadID = ""
+	}
 	if ok && threadID != "" && allowResume {
 		resumeAttempted = true
 		if err := r.client.ResumeThread(ctx, threadID, req.DynamicTools); err != nil {
@@ -121,7 +123,7 @@ func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, er
 		Recovery: RecoveryStatus{
 			RestartAttempted: restartAttempted,
 			ResumeAttempted:  resumeAttempted,
-			FellBackToFresh:  startedNewThread && ok && binding.ThreadID != "",
+			FellBackToFresh:  startedNewThread && resumeAttempted,
 			Mode:             recoveryMode,
 		},
 	}); err != nil {
@@ -150,7 +152,7 @@ func (r *Runner) CompactThread(ctx context.Context, bindingKey string) error {
 	if binding.Metadata == nil {
 		binding.Metadata = make(map[string]any)
 	}
-	binding.Metadata["last_compaction_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	binding.Metadata[bindingMetadataLastCompactionAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	return r.bindings.Save(binding)
 }
 
@@ -264,7 +266,9 @@ func (r *Runner) saveBinding(key string, binding Binding, threadID string, req R
 	if req.Control.ThinkingMode != "" {
 		binding.ThinkingMode = req.Control.ThinkingMode
 	}
-	binding.FastEnabled = req.Control.FastEnabled
+	if req.Control.FastEnabledSet {
+		binding.FastEnabled = req.Control.FastEnabled
+	}
 	if req.Control.LastUserMessageAt != "" {
 		if parsed, err := time.Parse(time.RFC3339Nano, req.Control.LastUserMessageAt); err == nil {
 			binding.LastUserMessageAt = parsed.UTC()
@@ -273,10 +277,11 @@ func (r *Runner) saveBinding(key string, binding Binding, threadID string, req R
 	if binding.Metadata == nil {
 		binding.Metadata = make(map[string]any)
 	}
-	binding.Metadata["recovery_mode"] = opts.Recovery.Mode
-	binding.Metadata["restart_attempted"] = opts.Recovery.RestartAttempted
-	binding.Metadata["resume_attempted"] = opts.Recovery.ResumeAttempted
-	binding.Metadata["fell_back_to_fresh"] = opts.Recovery.FellBackToFresh
+	binding.Metadata[bindingMetadataRecoveryMode] = opts.Recovery.Mode
+	binding.Metadata[bindingMetadataRestartAttempted] = opts.Recovery.RestartAttempted
+	binding.Metadata[bindingMetadataResumeAttempted] = opts.Recovery.ResumeAttempted
+	binding.Metadata[bindingMetadataFellBackToFresh] = opts.Recovery.FellBackToFresh
+	delete(binding.Metadata, bindingMetadataForceFreshThread)
 
 	return r.bindings.Save(binding)
 }

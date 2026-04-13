@@ -243,11 +243,6 @@ func Run(debug bool, homePath, configPath string, allowEmptyStartup bool) (runEr
 				runningServices.reloading.Store(false)
 				continue
 			}
-			if err = newCfg.ValidateModelList(); err != nil {
-				logger.Errorf("Config validation failed: %v", err)
-				runningServices.reloading.Store(false)
-				continue
-			}
 			err = executeReload(ctx, agentLoop, newCfg, &provider, runningServices, msgBus, allowEmptyStartup, debug)
 			if err != nil {
 				logger.Errorf("Manual reload failed: %v", err)
@@ -653,12 +648,6 @@ func setupConfigWatcherPolling(configPath string, debug bool) (chan *config.Conf
 					newCfg, err := config.LoadConfig(configPath)
 					if err != nil {
 						logger.Errorf("⚠ Error loading new config: %v", err)
-						logger.Warn("  Using previous valid config")
-						continue
-					}
-
-					if err := newCfg.ValidateModelList(); err != nil {
-						logger.Errorf("  ⚠ New config validation failed: %v", err)
 						logger.Warn("  Using previous valid config")
 						continue
 					}

@@ -1,43 +1,59 @@
 # Troubleshooting
 
-## "model ... not found in model_list" or OpenRouter "free is not a valid model ID"
+## Codex app-server will not start
 
-**Symptom:** You see either:
+Symptoms:
 
-- `Error creating provider: model "openrouter/free" not found in model_list`
-- OpenRouter returns 400: `"free is not a valid model ID"`
+- startup fails when a Codex-backed agent runs
+- interactive turns immediately error before streaming begins
 
-**Cause:** The `model` field in your `model_list` entry is what gets sent to the API. For OpenRouter you must use the **full** model ID, not a shorthand.
+Checks:
 
-- **Wrong:** `"model": "free"` → OpenRouter receives `free` and rejects it.
-- **Right:** `"model": "openrouter/free"` → OpenRouter receives `openrouter/free` (auto free-tier routing).
+1. Confirm the Codex binary and app-server entrypoint are installed and runnable in the current shell.
+2. Confirm you launched PicoClaw inside the auth-prepared environment used by your Codex auth package.
+3. Check the process logs for the first startup error instead of retrying blindly.
 
-**Fix:** In `~/.picoclaw/config.json` (or your config path):
+## No default model is available
 
-1. **agents.defaults.model_name** must match a `model_name` in `model_list` (e.g. `"openrouter-free"`).
-2. That entry’s **model** must be a valid OpenRouter model ID, for example:
-   - `"openrouter/free"` – auto free-tier
-   - `"google/gemini-2.0-flash-exp:free"`
-   - `"meta-llama/llama-3.1-8b-instruct:free"`
+This fork no longer uses `model_list`. Runtime defaults live under `runtime.codex`.
 
-Example snippet:
+Check:
 
-```json
-{
-  "agents": {
-    "defaults": {
-      "model_name": "openrouter-free"
-    }
-  },
-  "model_list": [
-    {
-      "model_name": "openrouter-free",
-      "model": "openrouter/free",
-      "api_key": "sk-or-v1-YOUR_OPENROUTER_KEY",
-      "api_base": "https://openrouter.ai/api/v1"
-    }
-  ]
-}
-```
+- `runtime.codex.default_model`
+- optional per-agent frontmatter `model`
 
-Get your key at [OpenRouter Keys](https://openrouter.ai/keys).
+If a thread-specific override was set earlier, `/status` will show the effective model.
+
+## DeepSeek fallback never activates
+
+DeepSeek is a narrow fallback. It is only used when Codex cannot start, connect, resume, or hits usage exhaustion.
+
+Checks:
+
+- `runtime.fallback.deepseek.enabled` is `true`
+- `runtime.fallback.deepseek.model` is set
+- `DEEPSEEK_API_KEY` is present in the environment
+
+If a live Codex turn fails for some other reason, fallback is intentionally not automatic.
+
+## Telegram or Discord will not connect
+
+Checks:
+
+- the channel is enabled in `config.json`
+- the matching token exists in `.security.yml`
+- `allow_from` is correct for the users you expect to talk to the bot
+
+Use `picoclaw gateway` to surface channel startup errors directly.
+
+## MCP tools are missing
+
+Checks:
+
+- the relevant MCP server is configured under `tools.mcp`
+- `tools.mcp.enabled` is `true`
+- the active agent explicitly lists that server in `mcpServers`
+- the MCP server command or endpoint is reachable from the current runtime environment
+- if `mcpServers` is omitted, the agent receives no MCP tools by default
+
+This fork keeps PicoClaw-managed MCP. Codex-native MCP is intentionally disabled.

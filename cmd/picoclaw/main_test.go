@@ -40,7 +40,6 @@ func TestNewPicoclawCommand(t *testing.T) {
 		"agent",
 		"cron",
 		"gateway",
-		"migrate",
 		"onboard",
 		"skills",
 		"status",

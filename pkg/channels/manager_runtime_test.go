@@ -32,21 +32,14 @@ func TestNewManager_OnlyInitializesTelegramAndDiscord(t *testing.T) {
 
 	registerStubFactory("telegram")
 	registerStubFactory("discord")
-	registerStubFactory("matrix")
-	registerStubFactory("irc")
+	registerStubFactory("unsupported-alpha")
+	registerStubFactory("unsupported-beta")
 
 	cfg := config.DefaultConfig()
 	cfg.Channels.Telegram.Enabled = true
 	cfg.Channels.Telegram.SetToken("telegram-token")
 	cfg.Channels.Discord.Enabled = true
 	cfg.Channels.Discord.Token = *config.NewSecureString("discord-token")
-	cfg.Channels.Matrix.Enabled = true
-	cfg.Channels.Matrix.Homeserver = "https://matrix.example.com"
-	cfg.Channels.Matrix.UserID = "@bot:example.com"
-	cfg.Channels.Matrix.AccessToken.Set("matrix-token")
-	cfg.Channels.IRC.Enabled = true
-	cfg.Channels.IRC.Server = "irc.example.com:6697"
-	cfg.Channels.IRC.Nick = "picoclaw"
 
 	m, err := NewManager(cfg, bus.NewMessageBus(), nil)
 	if err != nil {
@@ -67,11 +60,11 @@ func TestNewManager_OnlyInitializesTelegramAndDiscord(t *testing.T) {
 		}
 	}
 
-	if _, ok := m.GetChannel("matrix"); ok {
-		t.Fatal("expected matrix to be omitted from the runtime manager")
+	if _, ok := m.GetChannel("unsupported-alpha"); ok {
+		t.Fatal("expected unsupported-alpha to be omitted from the runtime manager")
 	}
-	if _, ok := m.GetChannel("irc"); ok {
-		t.Fatal("expected irc to be omitted from the runtime manager")
+	if _, ok := m.GetChannel("unsupported-beta"); ok {
+		t.Fatal("expected unsupported-beta to be omitted from the runtime manager")
 	}
 }
 
@@ -99,21 +92,14 @@ func TestNewManager_OnlyInitializesTelegramAndDiscord_StartsCleanly(t *testing.T
 
 	registerStubFactory("telegram")
 	registerStubFactory("discord")
-	registerStubFactory("matrix")
-	registerStubFactory("irc")
+	registerStubFactory("unsupported-alpha")
+	registerStubFactory("unsupported-beta")
 
 	cfg := config.DefaultConfig()
 	cfg.Channels.Telegram.Enabled = true
 	cfg.Channels.Telegram.SetToken("telegram-token")
 	cfg.Channels.Discord.Enabled = true
 	cfg.Channels.Discord.Token = *config.NewSecureString("discord-token")
-	cfg.Channels.Matrix.Enabled = true
-	cfg.Channels.Matrix.Homeserver = "https://matrix.example.com"
-	cfg.Channels.Matrix.UserID = "@bot:example.com"
-	cfg.Channels.Matrix.AccessToken.Set("matrix-token")
-	cfg.Channels.IRC.Enabled = true
-	cfg.Channels.IRC.Server = "irc.example.com:6697"
-	cfg.Channels.IRC.Nick = "picoclaw"
 
 	m, err := NewManager(cfg, bus.NewMessageBus(), nil)
 	if err != nil {

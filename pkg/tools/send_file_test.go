@@ -15,7 +15,7 @@ import (
 func TestSendFileTool_MissingPath(t *testing.T) {
 	store := media.NewFileMediaStore()
 	tool := NewSendFileTool("/tmp", false, 0, store)
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{})
 	if !result.IsError {
@@ -36,7 +36,7 @@ func TestSendFileTool_NoContext(t *testing.T) {
 
 func TestSendFileTool_NoMediaStore(t *testing.T) {
 	tool := NewSendFileTool("/tmp", false, 0, nil)
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{"path": "/tmp/test.txt"})
 	if !result.IsError {
@@ -47,7 +47,7 @@ func TestSendFileTool_NoMediaStore(t *testing.T) {
 func TestSendFileTool_Directory(t *testing.T) {
 	store := media.NewFileMediaStore()
 	tool := NewSendFileTool("/tmp", false, 0, store)
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{"path": "/tmp"})
 	if !result.IsError {
@@ -65,7 +65,7 @@ func TestSendFileTool_FileTooLarge(t *testing.T) {
 
 	store := media.NewFileMediaStore()
 	tool := NewSendFileTool(dir, false, 512, store) // 512 byte limit
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{"path": testFile})
 	if !result.IsError {
@@ -92,7 +92,7 @@ func TestSendFileTool_Success(t *testing.T) {
 
 	store := media.NewFileMediaStore()
 	tool := NewSendFileTool(dir, false, 0, store)
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{"path": testFile})
 	if result.IsError {
@@ -167,7 +167,7 @@ func TestSendFileTool_AllowsWhitelistedMediaTempPath(t *testing.T) {
 
 	store := media.NewFileMediaStore()
 	tool := NewSendFileTool(workspace, true, 0, store, []*regexp.Regexp{pattern})
-	tool.SetContext("feishu", "chat123")
+	tool.SetContext("telegram", "chat123")
 
 	result := tool.Execute(context.Background(), map[string]any{"path": testPath})
 	if result.IsError {

@@ -42,20 +42,11 @@ func DetectTTS(cfg *config.Config) TTSProvider {
 		return nil
 	}
 
-	if modelName := strings.TrimSpace(cfg.Voice.TTSModelName); modelName != "" {
-		if mc, err := cfg.GetModelConfig(modelName); err == nil {
-			if provider := providerFromModelConfig(mc); provider != nil {
-				return provider
-			}
-		}
-	}
-
-	for _, mc := range cfg.ModelList {
-		if strings.Contains(strings.ToLower(mc.Model), "tts") && mc.APIKey() != "" {
-			if provider := providerFromModelConfig(mc); provider != nil {
-				return provider
-			}
-		}
+	// The codex-first runtime no longer loads the legacy model catalog used by
+	// automatic TTS detection. Keep TTS disabled until a runtime-native voice
+	// config is introduced.
+	if strings.TrimSpace(cfg.Voice.TTSModelName) == "" {
+		return nil
 	}
 	return nil
 }

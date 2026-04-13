@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -123,7 +124,10 @@ func DeepSeekFallbackModelConfig(cfg *config.Config) (*config.ModelConfig, bool)
 	return &config.ModelConfig{
 		ModelName: "deepseek-fallback",
 		Model:     "deepseek/" + model,
-		APIBase:   apiBase,
+		APIKeyValue: func() config.SecureString {
+			return *config.NewSecureString(strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")))
+		}(),
+		APIBase: apiBase,
 	}, true
 }
 

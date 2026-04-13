@@ -6,7 +6,6 @@ import (
 
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
 	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/cliui"
-	"github.com/sipeed/picoclaw/pkg/auth"
 	"github.com/sipeed/picoclaw/pkg/config"
 )
 
@@ -35,26 +34,33 @@ func statusCmd() {
 		ConfigOK:      configOK,
 		WorkspacePath: workspace,
 		WorkspaceOK:   wsOK,
-		Model:         cfg.Runtime.Codex.DefaultModel,
 	}
 
 	if configOK {
-		report.Providers = []cliui.ProviderRow{
-			{Name: "Runtime model", Val: "✓"},
+		report.Model = cfg.Agents.Defaults.GetModelName()
+		if report.Model == "" {
+			report.Model = cfg.Runtime.Codex.DefaultModel
+		}
+		if report.Model == "" {
+			report.Model = "not configured"
 		}
 
-		store, _ := auth.LoadStore()
-		if store != nil && len(store.Credentials) > 0 {
-			for provider, cred := range store.Credentials {
-				st := "authenticated"
-				if cred.IsExpired() {
-					st = "expired"
-				} else if cred.NeedsRefresh() {
-					st = "needs refresh"
+		val := func(enabled bool, extra ...string) string {
+			if enabled {
+				if len(extra) > 0 && extra[0] != "" {
+					return "✓ " + extra[0]
 				}
-				report.OAuthLines = append(report.OAuthLines,
-					fmt.Sprintf("%s (%s): %s", provider, cred.AuthMethod, st))
+				return "✓"
 			}
+			return "not set"
+		}
+
+		report.Providers = []cliui.ProviderRow{
+			{Name: "Codex app-server", Val: val(true)},
+			{
+				Name: "DeepSeek fallback",
+				Val:  val(cfg.Runtime.Fallback.DeepSeek.Enabled, cfg.Runtime.Fallback.DeepSeek.Model),
+			},
 		}
 	}
 

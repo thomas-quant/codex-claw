@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"os"
 	"testing"
 
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -11,25 +12,25 @@ func TestExtractProtocol(t *testing.T) {
 		name         string
 		model        string
 		wantProtocol string
-		wantModelID   string
+		wantModelID  string
 	}{
 		{
 			name:         "openai with prefix",
 			model:        "openai/gpt-4o",
 			wantProtocol: "openai",
-			wantModelID:   "gpt-4o",
+			wantModelID:  "gpt-4o",
 		},
 		{
 			name:         "no prefix defaults to openai",
 			model:        "gpt-4o",
 			wantProtocol: "openai",
-			wantModelID:   "gpt-4o",
+			wantModelID:  "gpt-4o",
 		},
 		{
 			name:         "deepseek with prefix",
 			model:        "deepseek/deepseek-chat",
 			wantProtocol: "deepseek",
-			wantModelID:   "deepseek-chat",
+			wantModelID:  "deepseek-chat",
 		},
 	}
 
@@ -67,6 +68,8 @@ func TestCreateProviderFromConfig_UsesHTTPProviderForOpenAI(t *testing.T) {
 }
 
 func TestDeepSeekFallbackModelConfig_UsesRuntimeDefaults(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+	_ = os.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
 	cfg := config.DefaultConfig()
 	cfg.Runtime.Fallback.DeepSeek.Enabled = true
 	cfg.Runtime.Fallback.DeepSeek.Model = ""
@@ -81,5 +84,8 @@ func TestDeepSeekFallbackModelConfig_UsesRuntimeDefaults(t *testing.T) {
 	}
 	if modelCfg.APIBase != "https://api.deepseek.com/v1" {
 		t.Fatalf("APIBase = %q, want %q", modelCfg.APIBase, "https://api.deepseek.com/v1")
+	}
+	if modelCfg.APIKey() != "deepseek-test-key" {
+		t.Fatalf("APIKey() = %q, want %q", modelCfg.APIKey(), "deepseek-test-key")
 	}
 }

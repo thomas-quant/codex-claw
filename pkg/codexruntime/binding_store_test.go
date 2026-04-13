@@ -208,3 +208,77 @@ func TestBindingStore_MutatorsAndDelete(t *testing.T) {
 		t.Fatal("Load() after Delete reported binding present")
 	}
 }
+
+func TestBindingStore_ResetThreadPreservesRuntimeSettingsAndTimestamps(t *testing.T) {
+	t.Parallel()
+
+	store := NewBindingStore(t.TempDir())
+	now := time.Date(2026, time.April, 12, 16, 0, 0, 0, time.UTC)
+	if err := store.Save(Binding{
+		Key:               "telegram:chat-1:coder",
+		ThreadID:          "thr_old",
+		Model:             "gpt-5.4-mini",
+		ThinkingMode:      "medium",
+		FastEnabled:       true,
+		LastUserMessageAt: now,
+		Metadata: map[string]any{
+			"recovery_mode":      "resumed",
+			"restart_attempted":  true,
+			"resume_attempted":   true,
+			"fell_back_to_fresh": true,
+			"force_fresh_thread": true,
+			"last_compaction_at": now.Format(time.RFC3339Nano),
+			"runtime":            "codex",
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := store.ResetThread("telegram:chat-1:coder"); err != nil {
+		t.Fatalf("ResetThread() error = %v", err)
+	}
+
+	got, ok, err := store.Load("telegram:chat-1:coder")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Load() reported missing binding")
+	}
+	if got.ThreadID != "" {
+		t.Fatalf("Load() thread_id = %q, want empty", got.ThreadID)
+	}
+	if got.Model != "gpt-5.4-mini" {
+		t.Fatalf("Load() model = %q, want %q", got.Model, "gpt-5.4-mini")
+	}
+	if got.ThinkingMode != "medium" {
+		t.Fatalf("Load() thinking_mode = %q, want %q", got.ThinkingMode, "medium")
+	}
+	if !got.FastEnabled {
+		t.Fatal("Load() fast_enabled = false, want true")
+	}
+	if !got.LastUserMessageAt.Equal(now) {
+		t.Fatalf("Load() last_user_message_at = %v, want %v", got.LastUserMessageAt, now)
+	}
+	if got.Metadata["runtime"] != "codex" {
+		t.Fatalf("Load() runtime metadata = %#v, want preserved", got.Metadata["runtime"])
+	}
+	if got.Metadata["recovery_mode"] != nil {
+		t.Fatalf("Load() recovery_mode = %#v, want cleared", got.Metadata["recovery_mode"])
+	}
+	if got.Metadata["restart_attempted"] != nil {
+		t.Fatalf("Load() restart_attempted = %#v, want cleared", got.Metadata["restart_attempted"])
+	}
+	if got.Metadata["resume_attempted"] != nil {
+		t.Fatalf("Load() resume_attempted = %#v, want cleared", got.Metadata["resume_attempted"])
+	}
+	if got.Metadata["fell_back_to_fresh"] != nil {
+		t.Fatalf("Load() fell_back_to_fresh = %#v, want cleared", got.Metadata["fell_back_to_fresh"])
+	}
+	if got.Metadata["force_fresh_thread"] != nil {
+		t.Fatalf("Load() force_fresh_thread = %#v, want cleared", got.Metadata["force_fresh_thread"])
+	}
+	if got.Metadata["last_compaction_at"] != nil {
+		t.Fatalf("Load() last_compaction_at = %#v, want cleared", got.Metadata["last_compaction_at"])
+	}
+}

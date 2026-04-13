@@ -144,29 +144,15 @@ func TestNewOpenAITTSProvider_UsesConfiguredModel(t *testing.T) {
 	}
 }
 
-func TestDetectTTS_UsesMimoProviderForMimoModels(t *testing.T) {
+func TestDetectTTS_CodexFirstRuntimeDisablesLegacyAutoDetection(t *testing.T) {
 	t.Parallel()
 
 	provider := DetectTTS(&config.Config{
-		Voice: config.VoiceConfig{TTSModelName: "mimo-tts"},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "mimo-tts",
-				Model:     "mimo/mimo-v2-tts",
-				APIKeys:   config.SimpleSecureStrings("sk-mimo"),
-			},
-		},
+		Voice: config.VoiceConfig{TTSModelName: "mimo-v2-tts"},
 	})
 
-	ttsProvider, ok := provider.(*MimoTTSProvider)
-	if !ok {
-		t.Fatalf("DetectTTS() type = %T, want *MimoTTSProvider", provider)
-	}
-	if ttsProvider.model != "mimo-v2-tts" {
-		t.Fatalf("model mismatch: got %q, want %q", ttsProvider.model, "mimo-v2-tts")
-	}
-	if ttsProvider.apiBase != "https://api.xiaomimimo.com/v1/chat/completions" {
-		t.Fatalf("apiBase mismatch: got %q", ttsProvider.apiBase)
+	if provider != nil {
+		t.Fatalf("DetectTTS() = %T, want nil", provider)
 	}
 }
 
