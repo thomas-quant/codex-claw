@@ -4,7 +4,6 @@
 
 - Add handoff behavior for rollover threads (`summary + last few raw turns`) once the memory strategy is settled.
 - Replace the current transcript-derived fresh-thread bootstrap with a better handoff-summary policy once the memory strategy is settled.
-- Consider surfacing richer continuity fields in CLI/channel status output once the runtime shape settles.
 
 ## Compaction
 

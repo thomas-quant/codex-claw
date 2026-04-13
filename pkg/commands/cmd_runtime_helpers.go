@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 func runtimeSetModel(rt *Runtime, value string) (string, error) {
@@ -115,10 +116,23 @@ func formatStatusSnapshot(status StatusSnapshot) string {
 		lines = append(lines, "Fast: disabled")
 	}
 	if status.RecoveryState != "" {
-		lines = append(lines, fmt.Sprintf("Recovery: %s", status.RecoveryState))
+		lines = append(lines, fmt.Sprintf("Recovery state: %s", status.RecoveryState))
+	}
+	if !status.LastUserMessageAt.IsZero() {
+		lines = append(lines, fmt.Sprintf("Last user message: %s", formatStatusTime(status.LastUserMessageAt)))
+	}
+	if !status.LastCompactionAt.IsZero() {
+		lines = append(lines, fmt.Sprintf("Last compaction: %s", formatStatusTime(status.LastCompactionAt)))
+	}
+	if status.ForceFreshThread {
+		lines = append(lines, "Force fresh thread: yes")
 	}
 	if len(lines) == 0 {
 		return "No runtime status available"
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatStatusTime(ts time.Time) string {
+	return ts.UTC().Format("2006-01-02 15:04 UTC")
 }

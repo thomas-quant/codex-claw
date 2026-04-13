@@ -22,7 +22,11 @@ Check:
 - `runtime.codex.default_model`
 - optional per-agent frontmatter `model`
 
-If a thread-specific override was set earlier, `/status` will show the effective model.
+If a thread-specific override was set earlier, `/status` will show the effective model and the current thread continuity markers:
+
+- last user message time
+- last compaction time
+- recovery state
 
 ## DeepSeek fallback never activates
 

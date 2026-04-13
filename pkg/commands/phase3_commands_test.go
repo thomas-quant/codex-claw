@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func mustReply(t *testing.T) (func(string) error, *string) {
@@ -139,14 +140,19 @@ func TestCompact_UsesRuntimeCallback(t *testing.T) {
 }
 
 func TestStatus_UsesRuntimeSnapshot(t *testing.T) {
+	lastUserMessageAt := time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC)
+	lastCompactionAt := time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC)
 	rt := &Runtime{
 		ReadStatus: func() StatusSnapshot {
 			return StatusSnapshot{
-				ThreadID:      "thread-123",
-				Model:         "gpt-5.4",
-				ThinkingMode:  "deep",
-				FastEnabled:   true,
-				RecoveryState: "fresh",
+				ThreadID:          "thread-123",
+				Model:             "gpt-5.4",
+				ThinkingMode:      "deep",
+				FastEnabled:       true,
+				LastUserMessageAt: lastUserMessageAt,
+				LastCompactionAt:  lastCompactionAt,
+				ForceFreshThread:  true,
+				RecoveryState:     "resumed after restart",
 			}
 		},
 	}
@@ -160,17 +166,18 @@ func TestStatus_UsesRuntimeSnapshot(t *testing.T) {
 	if res.Outcome != OutcomeHandled {
 		t.Fatalf("outcome=%v, want=%v", res.Outcome, OutcomeHandled)
 	}
-	if !strings.Contains(*reply, "Thread ID: thread-123") {
-		t.Fatalf("reply=%q, want thread id", *reply)
-	}
-	if !strings.Contains(*reply, "Model: gpt-5.4") {
-		t.Fatalf("reply=%q, want model", *reply)
-	}
-	if !strings.Contains(*reply, "Thinking: deep") {
-		t.Fatalf("reply=%q, want thinking", *reply)
-	}
-	if !strings.Contains(*reply, "Fast: enabled") {
-		t.Fatalf("reply=%q, want fast state", *reply)
+	want := strings.Join([]string{
+		"Thread ID: thread-123",
+		"Model: gpt-5.4",
+		"Thinking: deep",
+		"Fast: enabled",
+		"Recovery state: resumed after restart",
+		"Last user message: 2026-04-13 10:15 UTC",
+		"Last compaction: 2026-04-13 10:45 UTC",
+		"Force fresh thread: yes",
+	}, "\n")
+	if *reply != want {
+		t.Fatalf("reply=%q, want %q", *reply, want)
 	}
 }
 

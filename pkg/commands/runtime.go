@@ -1,6 +1,10 @@
 package commands
 
-import "github.com/sipeed/picoclaw/pkg/config"
+import (
+	"time"
+
+	"github.com/sipeed/picoclaw/pkg/config"
+)
 
 // ModelInfo describes a runtime-visible model entry.
 type ModelInfo struct {
@@ -12,12 +16,15 @@ type ModelInfo struct {
 // handlers. It stays small and presentation-oriented so the command package
 // does not need to know about codexruntime internals.
 type StatusSnapshot struct {
-	ThreadID      string
-	Model         string
-	Provider      string
-	ThinkingMode  string
-	FastEnabled   bool
-	RecoveryState string
+	ThreadID          string
+	Model             string
+	Provider          string
+	ThinkingMode      string
+	FastEnabled       bool
+	LastUserMessageAt time.Time
+	LastCompactionAt  time.Time
+	ForceFreshThread  bool
+	RecoveryState     string
 }
 
 // Runtime provides runtime dependencies to command handlers. It is constructed
