@@ -1,7 +1,5 @@
 # Scheduled Tasks and Cron Jobs
 
-> Back to [README](../README.md)
-
 PicoClaw stores scheduled jobs in the current workspace and can run them either as reminders, full agent turns, or shell commands.
 
 ## Schedule Types
