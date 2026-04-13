@@ -789,8 +789,7 @@ func TestEstimateMessageTokens_WithReasoningAndMedia(t *testing.T) {
 }
 
 func TestIsOverContextBudget_RealisticSession(t *testing.T) {
-	// Simulate what BuildMessages produces: system + session history + current user.
-	// System message is built by BuildMessages, not stored in session.
+	// Representative history: leading system context, prior turns, current user.
 	systemMsg := providers.Message{
 		Role:    "system",
 		Content: strings.Repeat("system prompt content ", 100),
@@ -842,5 +841,68 @@ func TestIsOverContextBudget_RealisticSession(t *testing.T) {
 	// With a tiny context window, should exceed budget.
 	if !isOverContextBudget(500, messages, tools, 32768) {
 		t.Error("realistic session should exceed 500 context window")
+	}
+}
+
+func TestParseTurnBoundaries_NormalizesRoleFormatting(t *testing.T) {
+	history := []providers.Message{
+		{Role: "  SYSTEM ", Content: "system"},
+		{Role: "Assistant", Content: "bootstrap"},
+		{Role: "  User  ", Content: "first"},
+		{Role: "assistant", Content: "reply"},
+		{Role: "USER", Content: "current"},
+	}
+
+	got := parseTurnBoundaries(history)
+	want := []int{2, 4}
+	if len(got) != len(want) {
+		t.Fatalf("parseTurnBoundaries() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("parseTurnBoundaries()[%d] = %d, want %d", i, got[i], want[i])
+		}
+	}
+}
+
+func TestIsSafeBoundary_NormalizesRoleFormatting(t *testing.T) {
+	history := []providers.Message{
+		{Role: "assistant", Content: "prelude"},
+		{Role: "  User  ", Content: "boundary"},
+		{Role: "assistant", Content: "after"},
+	}
+
+	if !isSafeBoundary(history, 1) {
+		t.Fatal("isSafeBoundary() = false, want true for normalized user boundary")
+	}
+}
+
+func TestRemainingContextPercent_Bounded(t *testing.T) {
+	messages := []providers.Message{{Role: "user", Content: strings.Repeat("hello ", 200)}}
+
+	got := remainingContextPercent(4096, messages, nil, 512)
+	if got <= 0 || got >= 100 {
+		t.Fatalf("remainingContextPercent() = %d, want bounded percentage", got)
+	}
+}
+
+func TestRemainingContextPercent_LowContextThreshold(t *testing.T) {
+	messages := []providers.Message{{Role: "user", Content: strings.Repeat("hello ", 1200)}}
+
+	got := remainingContextPercent(4096, messages, nil, 512)
+	if got > 30 {
+		t.Fatalf("remainingContextPercent() = %d, want low-context threshold hit", got)
+	}
+}
+
+func TestIsOverContextBudget_ExactFitDoesNotOverflow(t *testing.T) {
+	if isOverContextBudget(1000, nil, nil, 1000) {
+		t.Fatal("isOverContextBudget() = true, want false for exact fit")
+	}
+}
+
+func TestIsOverContextBudget_NearLimitDoesNotOverflow(t *testing.T) {
+	if isOverContextBudget(1000, nil, nil, 995) {
+		t.Fatal("isOverContextBudget() = true, want false when remaining budget is below 1%")
 	}
 }
