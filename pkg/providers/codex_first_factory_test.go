@@ -6,15 +6,16 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 )
 
-func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
+func TestCreateProvider_UsesExplicitStartupModelOverride(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Runtime.Codex.DefaultModel = "gpt-5.4-codex"
+	cfg.Agents.Defaults.ModelName = "openai/gpt-4o"
 	cfg.Agents.List = []config.AgentConfig{
 		{
 			ID:      "main",
 			Default: true,
 			Model: &config.AgentModelConfig{
-				Primary: "openai/gpt-4o",
+				Primary: "openai/gpt-3.5",
 			},
 		},
 	}
@@ -34,16 +35,22 @@ func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
 		t.Fatalf("CreateProvider() model = %q, want %q", model, "openai/gpt-4o")
 	}
 
+}
+
+func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Runtime.Codex.DefaultModel = "gpt-5.4-codex"
+
 	cfg.Agents.List = nil
-	provider, model, err = CreateProvider(cfg)
+	provider, model, err := CreateProvider(cfg)
 	if err != nil {
-		t.Fatalf("CreateProvider() fallback error = %v", err)
+		t.Fatalf("CreateProvider() error = %v", err)
 	}
 	if _, ok := provider.(*CodexAppServerProvider); !ok {
-		t.Fatalf("CreateProvider() fallback provider type = %T, want *CodexAppServerProvider", provider)
+		t.Fatalf("CreateProvider() provider type = %T, want *CodexAppServerProvider", provider)
 	}
 	if model != "gpt-5.4-codex" {
-		t.Fatalf("CreateProvider() fallback model = %q, want %q", model, "gpt-5.4-codex")
+		t.Fatalf("CreateProvider() model = %q, want %q", model, "gpt-5.4-codex")
 	}
 }
 

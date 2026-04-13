@@ -20,7 +20,10 @@ func CreateProvider(cfg *config.Config) (LLMProvider, string, error) {
 		return nil, "", fmt.Errorf("config is nil")
 	}
 
-	model := explicitAgentModel(cfg)
+	model := strings.TrimSpace(cfg.Agents.Defaults.GetModelName())
+	if model == "" {
+		model = explicitAgentModel(cfg)
+	}
 	if model == "" {
 		model = strings.TrimSpace(cfg.Runtime.Codex.DefaultModel)
 	}
