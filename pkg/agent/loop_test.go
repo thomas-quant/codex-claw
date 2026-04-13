@@ -166,6 +166,7 @@ type interactiveLoopProvider struct {
 	mu                sync.Mutex
 	chatCalled        bool
 	interactiveCalled bool
+	callOrder         []string
 	updates           []providers.InteractiveTurnRequest
 	chunks            []string
 	finalContent      string
@@ -174,6 +175,7 @@ type interactiveLoopProvider struct {
 	turnErrors        []error
 	models            []providers.InteractiveModelInfo
 	status            providers.InteractiveThreadStatus
+	statusErr         error
 	setModelCalls     []string
 	setThinkingCalls  []string
 	compactCalls      int
@@ -203,6 +205,7 @@ func (p *interactiveLoopProvider) RunInteractiveTurn(
 ) (*providers.LLMResponse, error) {
 	p.mu.Lock()
 	p.interactiveCalled = true
+	p.callOrder = append(p.callOrder, "interactive")
 	p.updates = append(p.updates, req)
 	chunks := append([]string(nil), p.chunks...)
 	finalContent := p.finalContent
@@ -257,7 +260,7 @@ func (p *interactiveLoopProvider) ListModels(context.Context) ([]providers.Inter
 func (p *interactiveLoopProvider) ReadThreadStatus(context.Context, providers.InteractiveThreadControlRequest) (providers.InteractiveThreadStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.status, nil
+	return p.status, p.statusErr
 }
 
 func (p *interactiveLoopProvider) SetThreadModel(_ context.Context, _ providers.InteractiveThreadControlRequest, model string) (string, error) {
@@ -288,6 +291,7 @@ func (p *interactiveLoopProvider) ToggleThreadFast(context.Context, providers.In
 func (p *interactiveLoopProvider) CompactThread(context.Context, providers.InteractiveThreadControlRequest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.callOrder = append(p.callOrder, "compact")
 	p.compactCalls++
 	return nil
 }
@@ -711,11 +715,433 @@ func TestAgentLoop_InteractiveProviderPassesThreadRuntimeControl(t *testing.T) {
 	if !reqs[0].Control.FastEnabled {
 		t.Fatal("request fast_enabled = false, want true")
 	}
+	if !reqs[0].Control.FastEnabledSet {
+		t.Fatal("request fast_enabled_set = false, want true")
+	}
 	if reqs[0].Control.LastUserMessageAt == "" {
 		t.Fatal("request last_user_message_at is empty")
 	}
 	if reqs[0].Recovery != (providers.InteractiveRecoveryRequest{AllowServerRestart: true, AllowResume: true}) {
 		t.Fatalf("request recovery = %#v, want restart+resume enabled", reqs[0].Recovery)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderBootstrapsFreshThreadFromHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		finalContent: "first reply",
+		status: providers.InteractiveThreadStatus{
+			ThreadID: "thr_123",
+			Model:    "gpt-5.4",
+		},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	if _, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "first question",
+	}); err != nil {
+		t.Fatalf("first processMessage() error = %v", err)
+	}
+
+	provider.mu.Lock()
+	provider.status.ThreadID = ""
+	provider.finalContent = "second reply"
+	provider.mu.Unlock()
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "second question",
+	})
+	if err != nil {
+		t.Fatalf("second processMessage() error = %v", err)
+	}
+	if response != "second reply" {
+		t.Fatalf("response = %q, want %q", response, "second reply")
+	}
+
+	_, interactiveCalled, reqs, _ := provider.snapshot()
+	if !interactiveCalled || len(reqs) != 2 {
+		t.Fatalf("interactive provider requests = %d, want 2", len(reqs))
+	}
+	if reqs[0].BootstrapInput != "" {
+		t.Fatalf("first request bootstrap_input = %q, want empty for existing thread", reqs[0].BootstrapInput)
+	}
+
+	wantBootstrap := buildInteractiveBootstrapInput(reqs[1].Messages, 3)
+	if wantBootstrap == "" {
+		t.Fatal("want bootstrap_input to be populated from history")
+	}
+	if reqs[1].BootstrapInput != wantBootstrap {
+		t.Fatalf("bootstrap_input = %q, want %q", reqs[1].BootstrapInput, wantBootstrap)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderForcesFreshThreadAfterInactivity(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Runtime: config.RuntimeConfig{
+			Codex: config.CodexRuntimeConfig{
+				AutoCompactThresholdPercent: 100,
+			},
+		},
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		finalContent: "done",
+		status: providers.InteractiveThreadStatus{
+			ThreadID:          "thr_123",
+			Model:             "gpt-5.4",
+			LastUserMessageAt: time.Now().UTC().Add(-(interactiveThreadInactivityLimit + time.Minute)),
+		},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "wake the thread back up",
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "done" {
+		t.Fatalf("response = %q, want %q", response, "done")
+	}
+
+	_, interactiveCalled, reqs, _ := provider.snapshot()
+	if !interactiveCalled || len(reqs) != 1 {
+		t.Fatalf("interactive provider requests = %d, want 1", len(reqs))
+	}
+	if !reqs[0].Control.ForceFreshThread {
+		t.Fatal("request force_fresh_thread = false, want true after inactivity")
+	}
+
+	wantBootstrap := buildInteractiveBootstrapInput(reqs[0].Messages, 3)
+	if reqs[0].BootstrapInput != wantBootstrap {
+		t.Fatalf("bootstrap_input = %q, want %q", reqs[0].BootstrapInput, wantBootstrap)
+	}
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.compactCalls != 0 {
+		t.Fatalf("CompactThread() calls = %d, want 0 when force_fresh_thread is true", provider.compactCalls)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderHonorsRuntimeForceFreshSignal(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Runtime: config.RuntimeConfig{
+			Codex: config.CodexRuntimeConfig{
+				AutoCompactThresholdPercent: 100,
+			},
+		},
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		finalContent: "done",
+		status: providers.InteractiveThreadStatus{
+			ThreadID:          "thr_123",
+			Model:             "gpt-5.4",
+			LastUserMessageAt: time.Now().UTC().Add(-time.Hour),
+			ForceFreshThread:  true,
+		},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "runtime says start fresh",
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "done" {
+		t.Fatalf("response = %q, want %q", response, "done")
+	}
+
+	_, interactiveCalled, reqs, _ := provider.snapshot()
+	if !interactiveCalled || len(reqs) != 1 {
+		t.Fatalf("interactive provider requests = %d, want 1", len(reqs))
+	}
+	if !reqs[0].Control.ForceFreshThread {
+		t.Fatal("request force_fresh_thread = false, want true from runtime status")
+	}
+	wantBootstrap := buildInteractiveBootstrapInput(reqs[0].Messages, 3)
+	if reqs[0].BootstrapInput != wantBootstrap {
+		t.Fatalf("bootstrap_input = %q, want %q", reqs[0].BootstrapInput, wantBootstrap)
+	}
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.compactCalls != 0 {
+		t.Fatalf("CompactThread() calls = %d, want 0 when runtime requests force fresh", provider.compactCalls)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderCompactsExistingThreadBeforeTurn(t *testing.T) {
+	tmpDir := t.TempDir()
+	const threshold = 20
+	cfg := &config.Config{
+		Runtime: config.RuntimeConfig{
+			Codex: config.CodexRuntimeConfig{
+				AutoCompactThresholdPercent: threshold,
+			},
+		},
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         1800,
+				ContextWindow:     2400,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		finalContent: "done",
+		status: providers.InteractiveThreadStatus{
+			ThreadID:          "thr_123",
+			Model:             "gpt-5.4",
+			LastUserMessageAt: time.Now().UTC().Add(-time.Hour),
+		},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	agent, ok := al.GetRegistry().GetAgent("main")
+	if !ok {
+		t.Fatal("main agent not found")
+	}
+
+	content := "compact me"
+	var remaining int
+	for i := 0; i < 64; i++ {
+		messages := agent.ContextBuilder.BuildMessages(
+			nil,
+			"",
+			content,
+			nil,
+			"telegram",
+			"chat-1",
+			"user-1",
+			"",
+			activeSkillNames(agent, processOptions{})...,
+		)
+		remaining = remainingContextPercent(
+			agent.ContextWindow,
+			messages,
+			agent.Tools.ToProviderDefs(),
+			agent.MaxTokens,
+		)
+		if !isOverContextBudget(agent.ContextWindow, messages, agent.Tools.ToProviderDefs(), agent.MaxTokens) &&
+			remaining <= threshold {
+			break
+		}
+		content += " compact me"
+	}
+	if remaining > threshold {
+		t.Fatalf("remaining context = %d%%, want <= %d%% before exercising proactive compaction", remaining, threshold)
+	}
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  content,
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "done" {
+		t.Fatalf("response = %q, want %q", response, "done")
+	}
+
+	_, interactiveCalled, reqs, _ := provider.snapshot()
+	if !interactiveCalled || len(reqs) != 1 {
+		t.Fatalf("interactive provider requests = %d, want 1", len(reqs))
+	}
+	if reqs[0].Control.ForceFreshThread {
+		t.Fatal("request force_fresh_thread = true, want false for recent activity")
+	}
+	if reqs[0].BootstrapInput != "" {
+		t.Fatalf("bootstrap_input = %q, want empty for reused thread", reqs[0].BootstrapInput)
+	}
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.compactCalls != 1 {
+		t.Fatalf("CompactThread() calls = %d, want 1", provider.compactCalls)
+	}
+	if !slices.Equal(provider.callOrder, []string{"compact", "interactive"}) {
+		t.Fatalf("call order = %v, want compact before interactive", provider.callOrder)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderFallsBackToDeepSeekOnUsageExhaustion(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		turnErrors: []error{errors.New("usage limit reached")},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	agent := al.GetRegistry().GetDefaultAgent()
+	fallback := &countingMockProvider{response: "deepseek fallback"}
+	agent.DeepSeekFallback = fallback
+	agent.DeepSeekFallbackModel = "deepseek-chat"
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "hello",
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "deepseek fallback" {
+		t.Fatalf("response = %q, want %q", response, "deepseek fallback")
+	}
+
+	chatCalled, interactiveCalled, reqs, _ := provider.snapshot()
+	if chatCalled {
+		t.Fatal("expected Chat fallback path to remain unused")
+	}
+	if !interactiveCalled {
+		t.Fatal("expected interactive provider path to be used")
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("interactive request count = %d, want 1", len(reqs))
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("fallback calls = %d, want 1", fallback.calls)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderFallsBackToDeepSeekOnStartupFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		turnErrors: []error{errors.New("codexruntime: start stdio transport: executable file not found")},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	agent := al.GetRegistry().GetDefaultAgent()
+	fallback := &countingMockProvider{response: "deepseek fallback"}
+	agent.DeepSeekFallback = fallback
+	agent.DeepSeekFallbackModel = "deepseek-chat"
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "hello",
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "deepseek fallback" {
+		t.Fatalf("response = %q, want %q", response, "deepseek fallback")
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("fallback calls = %d, want 1", fallback.calls)
+	}
+}
+
+func TestAgentLoop_InteractiveProviderDoesNotAutoFallbackOnOrdinaryError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		turnErrors: []error{errors.New("tool bridge exploded")},
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	agent := al.GetRegistry().GetDefaultAgent()
+	fallback := &countingMockProvider{response: "deepseek fallback"}
+	agent.DeepSeekFallback = fallback
+	agent.DeepSeekFallbackModel = "deepseek-chat"
+
+	_, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "hello",
+	})
+	if err == nil {
+		t.Fatal("processMessage() error = nil, want ordinary codex error")
+	}
+	if fallback.calls != 0 {
+		t.Fatalf("fallback calls = %d, want 0", fallback.calls)
 	}
 }
 
@@ -2132,7 +2558,7 @@ func TestProcessMessage_CommandOutcomes(t *testing.T) {
 	helper := testHelper{al: al}
 
 	baseMsg := bus.InboundMessage{
-		Channel:  "whatsapp",
+		Channel:  "telegram",
 		SenderID: "user1",
 		ChatID:   "chat1",
 		Peer: bus.Peer{
@@ -2148,7 +2574,7 @@ func TestProcessMessage_CommandOutcomes(t *testing.T) {
 		Content:  "/show channel",
 		Peer:     baseMsg.Peer,
 	})
-	if showResp != "Current Channel: whatsapp" {
+	if showResp != "Current Channel: telegram" {
 		t.Fatalf("unexpected /show reply: %q", showResp)
 	}
 	if provider.calls != 0 {
@@ -2181,502 +2607,6 @@ func TestProcessMessage_CommandOutcomes(t *testing.T) {
 	}
 	if provider.calls != 2 {
 		t.Fatalf("LLM should be called for passthrough /new command, calls=%d", provider.calls)
-	}
-}
-
-func TestProcessMessage_SwitchModelShowModelConsistency(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "agent-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				Provider:          "openai",
-				ModelName:         "local",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "local",
-				Model:     "openai/local-model",
-				APIBase:   "https://local.example.invalid/v1",
-				APIKeys:   config.SimpleSecureStrings("test-key"),
-			},
-			{
-				ModelName: "deepseek",
-				Model:     "openrouter/deepseek/deepseek-v3.2",
-				APIBase:   "https://openrouter.ai/api/v1",
-				APIKeys:   config.SimpleSecureStrings("test-key"),
-			},
-		},
-	}
-
-	msgBus := bus.NewMessageBus()
-	provider := &countingMockProvider{response: "LLM reply"}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
-
-	switchResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "/switch model to deepseek",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if !strings.Contains(switchResp, "Switched model from local to deepseek") {
-		t.Fatalf("unexpected /switch reply: %q", switchResp)
-	}
-
-	showResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "/show model",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if !strings.Contains(showResp, "Current Model: deepseek (Provider: openrouter)") {
-		t.Fatalf("unexpected /show model reply after switch: %q", showResp)
-	}
-
-	if provider.calls != 0 {
-		t.Fatalf("LLM should not be called for /switch and /show, calls=%d", provider.calls)
-	}
-}
-
-func TestProcessMessage_SwitchModelRejectsUnknownAlias(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "agent-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				Provider:          "openai",
-				ModelName:         "local",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "local",
-				Model:     "openai/local-model",
-				APIBase:   "https://local.example.invalid/v1",
-				APIKeys:   config.SimpleSecureStrings("test-key"),
-			},
-		},
-	}
-
-	msgBus := bus.NewMessageBus()
-	provider := &countingMockProvider{response: "LLM reply"}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
-
-	switchResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "/switch model to missing",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if switchResp != `model "missing" not found in model_list or providers` {
-		t.Fatalf("unexpected /switch error reply: %q", switchResp)
-	}
-
-	showResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "/show model",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if !strings.Contains(showResp, "Current Model: local (Provider: openai)") {
-		t.Fatalf("unexpected /show model reply after rejected switch: %q", showResp)
-	}
-
-	if provider.calls != 0 {
-		t.Fatalf("LLM should not be called for rejected /switch and /show, calls=%d", provider.calls)
-	}
-}
-
-func TestProcessMessage_SwitchModelRoutesSubsequentRequestsToSelectedProvider(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "agent-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	localCalls := 0
-	localModel := ""
-	localServer := newChatCompletionTestServer(t, "local", "local reply", &localCalls, &localModel)
-	defer localServer.Close()
-
-	remoteCalls := 0
-	remoteModel := ""
-	remoteServer := newChatCompletionTestServer(t, "remote", "remote reply", &remoteCalls, &remoteModel)
-	defer remoteServer.Close()
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				Provider:          "openai",
-				ModelName:         "local",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "local",
-				Model:     "openai/Qwen3.5-35B-A3B",
-				APIBase:   localServer.URL,
-				APIKeys:   config.SimpleSecureStrings("local-key"),
-			},
-			{
-				ModelName: "deepseek",
-				Model:     "openrouter/deepseek/deepseek-v3.2",
-				APIBase:   remoteServer.URL,
-				APIKeys:   config.SimpleSecureStrings("remote-key"),
-			},
-		},
-	}
-
-	msgBus := bus.NewMessageBus()
-	provider, _, err := providers.CreateProvider(cfg)
-	if err != nil {
-		t.Fatalf("CreateProvider() error = %v", err)
-	}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
-
-	firstResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "hello before switch",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if firstResp != "local reply" {
-		t.Fatalf("unexpected response before switch: %q", firstResp)
-	}
-	if localCalls != 1 {
-		t.Fatalf("local calls before switch = %d, want 1", localCalls)
-	}
-	if remoteCalls != 0 {
-		t.Fatalf("remote calls before switch = %d, want 0", remoteCalls)
-	}
-	if localModel != "Qwen3.5-35B-A3B" {
-		t.Fatalf("local model before switch = %q, want %q", localModel, "Qwen3.5-35B-A3B")
-	}
-
-	switchResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "/switch model to deepseek",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if !strings.Contains(switchResp, "Switched model from local to deepseek") {
-		t.Fatalf("unexpected /switch reply: %q", switchResp)
-	}
-
-	secondResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "hello after switch",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if secondResp != "remote reply" {
-		t.Fatalf("unexpected response after switch: %q", secondResp)
-	}
-	if localCalls != 1 {
-		t.Fatalf("local calls after switch = %d, want 1", localCalls)
-	}
-	if remoteCalls != 1 {
-		t.Fatalf("remote calls after switch = %d, want 1", remoteCalls)
-	}
-	if remoteModel != "deepseek-v3.2" {
-		t.Fatalf(
-			"remote model after switch = %q, want %q",
-			remoteModel,
-			"deepseek-v3.2",
-		)
-	}
-}
-
-func TestProcessMessage_ModelRoutingUsesLightProvider(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "agent-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	heavyCalls := 0
-	heavyServer := newStrictChatCompletionTestServer(
-		t,
-		"heavy",
-		"gemini-2.5-flash",
-		"heavy reply",
-		&heavyCalls,
-	)
-	defer heavyServer.Close()
-
-	lightCalls := 0
-	lightServer := newStrictChatCompletionTestServer(
-		t,
-		"light",
-		"qwen2.5:0.5b",
-		"light reply",
-		&lightCalls,
-	)
-	defer lightServer.Close()
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				ModelName:         "gemini-main",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
-				Routing: &config.RoutingConfig{
-					Enabled:    true,
-					LightModel: "qwen-light",
-					Threshold:  0.99,
-				},
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "gemini-main",
-				Model:     "gemini/gemini-2.5-flash",
-				APIBase:   heavyServer.URL,
-				APIKeys:   config.SimpleSecureStrings("heavy-key"),
-			},
-			{
-				ModelName: "qwen-light",
-				Model:     "ollama/qwen2.5:0.5b",
-				APIBase:   lightServer.URL,
-				APIKeys:   config.SimpleSecureStrings("light-key"),
-			},
-		},
-	}
-
-	msgBus := bus.NewMessageBus()
-	provider, _, err := providers.CreateProvider(cfg)
-	if err != nil {
-		t.Fatalf("CreateProvider() error = %v", err)
-	}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
-
-	resp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "hi",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	})
-	if resp != "light reply" {
-		t.Fatalf("response = %q, want %q", resp, "light reply")
-	}
-	if heavyCalls != 0 {
-		t.Fatalf("heavy calls = %d, want 0", heavyCalls)
-	}
-	if lightCalls != 1 {
-		t.Fatalf("light calls = %d, want 1", lightCalls)
-	}
-}
-
-// TestProcessMessage_FallbackUsesPerCandidateProvider is the loop-level test for
-// bug #2140. It verifies that when the primary model returns a rate-limit error
-// the fallback closure routes the retry to the fallback model's own provider
-// (its own api_base), not back to the primary provider's endpoint.
-func TestProcessMessage_FallbackUsesPerCandidateProvider(t *testing.T) {
-	workspace := t.TempDir()
-
-	primaryCalls := 0
-	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		primaryCalls++
-		// Return 429 so FallbackChain classifies this as retriable and moves on.
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{
-				"message": "rate limit exceeded",
-				"type":    "rate_limit_error",
-			},
-		})
-	}))
-	defer primaryServer.Close()
-
-	fallbackCalls := 0
-	fallbackServer := newStrictChatCompletionTestServer(
-		t, "fallback", "gemma-3-27b-it", "fallback reply", &fallbackCalls,
-	)
-	defer fallbackServer.Close()
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         workspace,
-				ModelName:         "mistral-primary",
-				ModelFallbacks:    []string{"gemma-fallback"},
-				MaxTokens:         4096,
-				MaxToolIterations: 3,
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "mistral-primary",
-				Model:     "openrouter/mistralai/mistral-small-3.1",
-				APIBase:   primaryServer.URL,
-				APIKeys:   config.SimpleSecureStrings("primary-key"),
-				Workspace: workspace,
-			},
-			{
-				ModelName: "gemma-fallback",
-				Model:     "openrouter/gemma-3-27b-it",
-				APIBase:   fallbackServer.URL,
-				APIKeys:   config.SimpleSecureStrings("fallback-key"),
-				Workspace: workspace,
-			},
-		},
-	}
-
-	provider, _, err := providers.CreateProvider(cfg)
-	if err != nil {
-		t.Fatalf("CreateProvider() error = %v", err)
-	}
-	msgBus := bus.NewMessageBus()
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
-
-	resp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "hi",
-		Peer:     bus.Peer{Kind: "direct", ID: "user1"},
-	})
-
-	if resp != "fallback reply" {
-		t.Fatalf("response = %q, want %q (fallback provider)", resp, "fallback reply")
-	}
-	if primaryCalls == 0 {
-		t.Fatal("primary server was never called; expected at least one attempt")
-	}
-	if fallbackCalls != 1 {
-		t.Fatalf("fallback server calls = %d, want 1", fallbackCalls)
-	}
-}
-
-// TestProcessMessage_FallbackUsesActiveProviderWhenCandidateNotRegistered verifies
-// that when a candidate has no model_list entry it is absent from CandidateProviders
-// and the fallback closure falls back to activeProvider instead of panicking.
-func TestProcessMessage_FallbackUsesActiveProviderWhenCandidateNotRegistered(t *testing.T) {
-	workspace := t.TempDir()
-
-	// Primary server: returns 429 on first call, succeeds on second.
-	// Both the primary and the unregistered fallback share this server
-	// (same api_base) so activeProvider routes both calls here.
-	callCount := 0
-	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		w.Header().Set("Content-Type", "application/json")
-		if callCount == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]any{"message": "rate limit", "type": "rate_limit_error"},
-			})
-			return
-		}
-		// Second call (fallback via activeProvider) succeeds.
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{
-				{"message": map[string]any{"content": "active provider reply"}, "finish_reason": "stop"},
-			},
-		})
-	}))
-	defer primaryServer.Close()
-
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         workspace,
-				ModelName:         "primary-model",
-				MaxTokens:         4096,
-				MaxToolIterations: 3,
-				// No model_list entry for this alias — absent from CandidateProviders.
-				ModelFallbacks: []string{"openrouter/fallback-model"},
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "primary-model",
-				Model:     "openrouter/primary-model",
-				APIBase:   primaryServer.URL,
-				APIKeys:   config.SimpleSecureStrings("primary-key"),
-				Workspace: workspace,
-			},
-		},
-	}
-
-	provider, _, err := providers.CreateProvider(cfg)
-	if err != nil {
-		t.Fatalf("CreateProvider() error = %v", err)
-	}
-	msgBus := bus.NewMessageBus()
-	al := NewAgentLoop(cfg, msgBus, provider)
-
-	helper := testHelper{al: al}
-	resp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Content:  "hi",
-		Peer:     bus.Peer{Kind: "direct", ID: "user1"},
-	})
-
-	if resp != "active provider reply" {
-		t.Fatalf("response = %q, want %q", resp, "active provider reply")
-	}
-	if callCount < 2 {
-		t.Fatalf("primary server calls = %d, want >= 2 (one 429 + one success via activeProvider)", callCount)
 	}
 }
 
@@ -3038,17 +2968,17 @@ func TestTargetReasoningChannelID_AllChannels(t *testing.T) {
 		t.Fatalf("Failed to create channel manager: %v", err)
 	}
 	for name, id := range map[string]string{
-		"whatsapp": "rid-whatsapp",
-		"telegram": "rid-telegram",
-		"feishu":   "rid-feishu",
-		"discord":  "rid-discord",
-		"maixcam":  "rid-maixcam",
-		"qq":       "rid-qq",
-		"dingtalk": "rid-dingtalk",
-		"slack":    "rid-slack",
-		"line":     "rid-line",
-		"onebot":   "rid-onebot",
-		"wecom":    "rid-wecom",
+		"unsupported-alpha": "rid-unsupported-alpha",
+		"telegram":          "rid-telegram",
+		"discord":           "rid-discord",
+		"unsupported-beta":  "rid-unsupported-beta",
+		"unsupported-gamma": "rid-unsupported-gamma",
+		"unsupported-delta": "rid-unsupported-delta",
+		"unsupported-eps":   "rid-unsupported-eps",
+		"unsupported-zeta":  "rid-unsupported-zeta",
+		"unsupported-eta":   "rid-unsupported-eta",
+		"unsupported-theta": "rid-unsupported-theta",
+		"unsupported-iota":  "rid-unsupported-iota",
 	} {
 		chManager.RegisterChannel(name, &fakeChannel{id: id})
 	}
@@ -3057,17 +2987,17 @@ func TestTargetReasoningChannelID_AllChannels(t *testing.T) {
 		channel string
 		wantID  string
 	}{
-		{channel: "whatsapp", wantID: "rid-whatsapp"},
+		{channel: "unsupported-alpha", wantID: "rid-unsupported-alpha"},
 		{channel: "telegram", wantID: "rid-telegram"},
-		{channel: "feishu", wantID: "rid-feishu"},
 		{channel: "discord", wantID: "rid-discord"},
-		{channel: "maixcam", wantID: "rid-maixcam"},
-		{channel: "qq", wantID: "rid-qq"},
-		{channel: "dingtalk", wantID: "rid-dingtalk"},
-		{channel: "slack", wantID: "rid-slack"},
-		{channel: "line", wantID: "rid-line"},
-		{channel: "onebot", wantID: "rid-onebot"},
-		{channel: "wecom", wantID: "rid-wecom"},
+		{channel: "unsupported-beta", wantID: "rid-unsupported-beta"},
+		{channel: "unsupported-gamma", wantID: "rid-unsupported-gamma"},
+		{channel: "unsupported-delta", wantID: "rid-unsupported-delta"},
+		{channel: "unsupported-eps", wantID: "rid-unsupported-eps"},
+		{channel: "unsupported-zeta", wantID: "rid-unsupported-zeta"},
+		{channel: "unsupported-eta", wantID: "rid-unsupported-eta"},
+		{channel: "unsupported-theta", wantID: "rid-unsupported-theta"},
+		{channel: "unsupported-iota", wantID: "rid-unsupported-iota"},
 		{channel: "unknown", wantID: ""},
 	}
 
@@ -3131,13 +3061,13 @@ func TestHandleReasoning(t *testing.T) {
 
 	t.Run("publishes one message for non telegram", func(t *testing.T) {
 		al, msgBus := newLoop(t)
-		al.handleReasoning(context.Background(), "hello reasoning", "slack", "channel-1")
+		al.handleReasoning(context.Background(), "hello reasoning", "discord", "channel-1")
 
 		msg, ok := <-msgBus.OutboundChan()
 		if !ok {
 			t.Fatal("expected an outbound message")
 		}
-		if msg.Channel != "slack" || msg.ChatID != "channel-1" || msg.Content != "hello reasoning" {
+		if msg.Channel != "discord" || msg.ChatID != "channel-1" || msg.Content != "hello reasoning" {
 			t.Fatalf("unexpected outbound message: %+v", msg)
 		}
 	})
@@ -3221,7 +3151,7 @@ func TestHandleReasoning(t *testing.T) {
 		defer cancel()
 
 		start := time.Now()
-		al.handleReasoning(ctx, "should timeout", "slack", "channel-full")
+		al.handleReasoning(ctx, "should timeout", "discord", "channel-full")
 		elapsed := time.Since(start)
 
 		// handleReasoning uses a 5s internal timeout, but the parent ctx

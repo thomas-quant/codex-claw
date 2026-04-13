@@ -8,6 +8,16 @@ import (
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
 
+const defaultRuntimeProvider = "codex"
+
+func runtimeDefaultProvider(defaultProvider string) string {
+	defaultProvider = strings.TrimSpace(defaultProvider)
+	if defaultProvider == "" {
+		return defaultRuntimeProvider
+	}
+	return providers.NormalizeProvider(defaultProvider)
+}
+
 func ensureProtocolModel(model string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
@@ -16,7 +26,7 @@ func ensureProtocolModel(model string) string {
 	if strings.Contains(model, "/") {
 		return model
 	}
-	return "openai/" + model
+	return defaultRuntimeProvider + "/" + model
 }
 
 func modelConfigIdentityKey(mc *config.ModelConfig) string {
@@ -56,20 +66,9 @@ func lookupModelConfigByRef(cfg *config.Config, raw string) *config.ModelConfig 
 		return nil
 	}
 
-	if mc, err := cfg.GetModelConfig(raw); err == nil && mc != nil && strings.TrimSpace(mc.Model) != "" {
-		return mc
-	}
-
-	for i := range cfg.ModelList {
-		mc := cfg.ModelList[i]
-		if mc == nil {
-			continue
-		}
+	if mc, ok := providers.DeepSeekFallbackModelConfig(cfg); ok {
 		fullModel := strings.TrimSpace(mc.Model)
-		if fullModel == "" {
-			continue
-		}
-		if fullModel == raw {
+		if fullModel == raw || strings.TrimSpace(mc.ModelName) == raw {
 			return mc
 		}
 		_, modelID := providers.ExtractProtocol(fullModel)
@@ -92,10 +91,10 @@ func resolveModelCandidate(
 	}
 
 	if mc := lookupModelConfigByRef(cfg, raw); mc != nil {
-		return candidateFromModelConfig(defaultProvider, mc)
+		return candidateFromModelConfig(runtimeDefaultProvider(defaultProvider), mc)
 	}
 
-	ref := providers.ParseModelRef(raw, defaultProvider)
+	ref := providers.ParseModelRef(ensureProtocolModel(raw), runtimeDefaultProvider(defaultProvider))
 	if ref == nil {
 		return providers.FallbackCandidate{}, false
 	}
@@ -156,15 +155,28 @@ func resolvedModelConfig(cfg *config.Config, modelName, workspace string) (*conf
 		return nil, fmt.Errorf("config is nil")
 	}
 
-	modelCfg, err := cfg.GetModelConfig(strings.TrimSpace(modelName))
-	if err != nil {
-		return nil, err
+	raw := strings.TrimSpace(modelName)
+	if raw == "" {
+		return nil, fmt.Errorf("model name is required")
 	}
 
-	clone := *modelCfg
-	if clone.Workspace == "" {
-		clone.Workspace = workspace
+	if modelCfg := lookupModelConfigByRef(cfg, raw); modelCfg != nil {
+		clone := *modelCfg
+		if clone.Workspace == "" {
+			clone.Workspace = workspace
+		}
+		return &clone, nil
 	}
 
-	return &clone, nil
+	fullModel := ensureProtocolModel(raw)
+	protocol, _ := providers.ExtractProtocol(fullModel)
+	modelCfg := &config.ModelConfig{
+		ModelName: raw,
+		Model:     fullModel,
+		Workspace: workspace,
+	}
+	if protocol == "codex" {
+		modelCfg.ThinkingLevel = cfg.Runtime.Codex.DefaultThinking
+	}
+	return modelCfg, nil
 }

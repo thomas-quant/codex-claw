@@ -99,122 +99,33 @@ func TestNewAgentInstance_DefaultsTemperatureWhenUnset(t *testing.T) {
 	}
 }
 
-func TestNewAgentInstance_ResolveCandidatesFromModelListAlias(t *testing.T) {
-	tests := []struct {
-		name         string
-		aliasName    string
-		modelName    string
-		apiBase      string
-		wantProvider string
-		wantModel    string
-	}{
-		{
-			name:         "alias with provider prefix",
-			aliasName:    "step-3.5-flash",
-			modelName:    "openrouter/stepfun/step-3.5-flash:free",
-			apiBase:      "https://openrouter.ai/api/v1",
-			wantProvider: "openrouter",
-			wantModel:    "stepfun/step-3.5-flash:free",
-		},
-		{
-			name:         "alias without provider prefix",
-			aliasName:    "glm-5",
-			modelName:    "glm-5",
-			apiBase:      "https://api.z.ai/api/coding/paas/v4",
-			wantProvider: "openai",
-			wantModel:    "glm-5",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "agent-instance-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
-
-			cfg := &config.Config{
-				Agents: config.AgentsConfig{
-					Defaults: config.AgentDefaults{
-						Workspace: tmpDir,
-						ModelName: tt.aliasName,
-					},
-				},
-				ModelList: []*config.ModelConfig{
-					{
-						ModelName: tt.aliasName,
-						Model:     tt.modelName,
-						APIBase:   tt.apiBase,
-					},
-				},
-			}
-
-			provider := &mockProvider{}
-			agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, provider)
-
-			if len(agent.Candidates) != 1 {
-				t.Fatalf("len(Candidates) = %d, want 1", len(agent.Candidates))
-			}
-			if agent.Candidates[0].Provider != tt.wantProvider {
-				t.Fatalf("candidate provider = %q, want %q", agent.Candidates[0].Provider, tt.wantProvider)
-			}
-			if agent.Candidates[0].Model != tt.wantModel {
-				t.Fatalf("candidate model = %q, want %q", agent.Candidates[0].Model, tt.wantModel)
-			}
-		})
-	}
-}
-
-func TestNewAgentInstance_PreservesDistinctLimiterIdentityForSharedResolvedModel(t *testing.T) {
+func TestNewAgentInstance_ResolveCandidatesFromRawCodexModel(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	cfg := &config.Config{
 		Agents: config.AgentsConfig{
 			Defaults: config.AgentDefaults{
-				Workspace:      tmpDir,
-				ModelName:      "glm-4.7",
-				ModelFallbacks: []string{"glm-4.7__key_1"},
+				Workspace: tmpDir,
+				ModelName: "gpt-5.4-mini",
 			},
 		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "glm-4.7",
-				Model:     "zhipu/glm-4.7",
-				RPM:       1,
-			},
-			{
-				ModelName: "glm-4.7__key_1",
-				Model:     "zhipu/glm-4.7",
-				RPM:       3,
+		Runtime: config.RuntimeConfig{
+			Codex: config.CodexRuntimeConfig{
+				DefaultModel:    "gpt-5.4",
+				DefaultThinking: "medium",
 			},
 		},
 	}
 
 	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, &mockProvider{})
-	if len(agent.Candidates) != 2 {
-		t.Fatalf("len(Candidates) = %d, want 2", len(agent.Candidates))
+	if len(agent.Candidates) != 1 {
+		t.Fatalf("len(Candidates) = %d, want 1", len(agent.Candidates))
 	}
-
-	first := agent.Candidates[0]
-	second := agent.Candidates[1]
-	if first.Provider != "zhipu" || first.Model != "glm-4.7" {
-		t.Fatalf("first candidate = %s/%s, want zhipu/glm-4.7", first.Provider, first.Model)
+	if agent.Candidates[0].Provider != "codex" {
+		t.Fatalf("candidate provider = %q, want %q", agent.Candidates[0].Provider, "codex")
 	}
-	if second.Provider != "zhipu" || second.Model != "glm-4.7" {
-		t.Fatalf("second candidate = %s/%s, want zhipu/glm-4.7", second.Provider, second.Model)
-	}
-	if first.IdentityKey != "model_name:glm-4.7" {
-		t.Fatalf("first identity key = %q, want %q", first.IdentityKey, "model_name:glm-4.7")
-	}
-	if second.IdentityKey != "model_name:glm-4.7__key_1" {
-		t.Fatalf("second identity key = %q, want %q", second.IdentityKey, "model_name:glm-4.7__key_1")
-	}
-	if first.RPM != 1 {
-		t.Fatalf("first RPM = %d, want 1", first.RPM)
-	}
-	if second.RPM != 3 {
-		t.Fatalf("second RPM = %d, want 3", second.RPM)
+	if agent.Candidates[0].Model != "gpt-5.4-mini" {
+		t.Fatalf("candidate model = %q, want %q", agent.Candidates[0].Model, "gpt-5.4-mini")
 	}
 }
 
@@ -315,63 +226,63 @@ func TestPopulateCandidateProviders_NilCfgIsNoop(t *testing.T) {
 // present in the output map is not overwritten.
 func TestPopulateCandidateProviders_SkipsExistingKeys(t *testing.T) {
 	existing := &mockProvider{}
-	key := providers.ModelKey("openai", "gpt-4o")
+	key := providers.ModelKey("codex", "gpt-5.4")
 	out := map[string]providers.LLMProvider{key: existing}
 
-	cfg := &config.Config{
-		ModelList: []*config.ModelConfig{
-			{ModelName: "my-gpt", Model: "openai/gpt-4o", APIKeys: config.SimpleSecureStrings("test-key")},
-		},
-	}
-	populateCandidateProvidersFromNames(cfg, t.TempDir(), []string{"my-gpt"}, out)
+	cfg := config.DefaultConfig()
+	populateCandidateProvidersFromNames(cfg, t.TempDir(), []string{"gpt-5.4"}, out)
 
 	if out[key] != existing {
 		t.Fatal("existing provider entry was overwritten; expected it to be preserved")
 	}
 }
 
-// TestPopulateCandidateProviders_ResolvesAlias verifies that a model_name
-// alias (e.g. "my-gpt") is resolved via GetModelConfig and the provider
-// is created using the underlying model's config.
-func TestPopulateCandidateProviders_ResolvesAlias(t *testing.T) {
+func TestPopulateCandidateProviders_ResolvesRawCodexModel(t *testing.T) {
 	workspace := t.TempDir()
 	out := map[string]providers.LLMProvider{}
 
-	cfg := &config.Config{
-		ModelList: []*config.ModelConfig{
-			{ModelName: "my-gpt", Model: "openai/gpt-4o", APIBase: "https://api.openai.com/v1", Workspace: workspace},
-		},
-	}
-	populateCandidateProvidersFromNames(cfg, workspace, []string{"my-gpt"}, out)
+	cfg := config.DefaultConfig()
+	populateCandidateProvidersFromNames(cfg, workspace, []string{"gpt-5.4-mini"}, out)
 
-	key := providers.ModelKey("openai", "gpt-4o")
+	key := providers.ModelKey("codex", "gpt-5.4-mini")
 	if out[key] == nil {
-		t.Fatalf("expected CandidateProviders[%q] to be populated for alias", key)
+		t.Fatalf("expected CandidateProviders[%q] to be populated for codex model", key)
 	}
 }
 
-// TestPopulateCandidateProviders_ResolvesProtocolPrefix verifies that a
-// model_list entry using full "provider/model" notation (e.g.
-// "gemini/gemma-3-27b-it") is matched correctly when referenced by model_name.
-func TestPopulateCandidateProviders_ResolvesProtocolPrefix(t *testing.T) {
+func TestPopulateCandidateProviders_ResolvesRuntimeDeepSeekFallback(t *testing.T) {
 	workspace := t.TempDir()
 	out := map[string]providers.LLMProvider{}
 
-	cfg := &config.Config{
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "gemma",
-				Model:     "gemini/gemma-3-27b-it",
-				APIKeys:   config.SimpleSecureStrings("gemini-test-key"),
-				Workspace: workspace,
-			},
-		},
-	}
-	populateCandidateProvidersFromNames(cfg, workspace, []string{"gemma"}, out)
+	cfg := config.DefaultConfig()
+	cfg.Runtime.Fallback.DeepSeek.Enabled = true
+	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
+	cfg.Runtime.Fallback.DeepSeek.APIBase = "https://api.deepseek.com/v1"
+	populateCandidateProvidersFromNames(cfg, workspace, []string{"deepseek-chat"}, out)
 
-	key := providers.ModelKey("gemini", "gemma-3-27b-it")
+	key := providers.ModelKey("deepseek", "deepseek-chat")
 	if out[key] == nil {
-		t.Fatalf("expected CandidateProviders[%q] to be populated for protocol-prefixed model", key)
+		t.Fatalf("expected CandidateProviders[%q] to be populated for deepseek fallback", key)
+	}
+}
+
+func TestNewAgentInstance_ConfiguresRuntimeDeepSeekFallbackProvider(t *testing.T) {
+	workspace := t.TempDir()
+
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Workspace = workspace
+	cfg.Agents.Defaults.ModelName = "gpt-5.4"
+	cfg.Runtime.Fallback.DeepSeek.Enabled = true
+	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
+	cfg.Runtime.Fallback.DeepSeek.APIBase = "https://api.deepseek.com/v1"
+
+	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, &mockProvider{})
+
+	if agent.DeepSeekFallback == nil {
+		t.Fatal("DeepSeekFallback = nil, want configured provider")
+	}
+	if agent.DeepSeekFallbackModel != "deepseek-chat" {
+		t.Fatalf("DeepSeekFallbackModel = %q, want %q", agent.DeepSeekFallbackModel, "deepseek-chat")
 	}
 }
 
@@ -379,90 +290,30 @@ func TestPopulateCandidateProviders_ResolvesProtocolPrefix(t *testing.T) {
 // path when the names slice is empty.
 func TestPopulateCandidateProviders_EmptyNamesIsNoop(t *testing.T) {
 	out := map[string]providers.LLMProvider{}
-	cfg := &config.Config{
-		ModelList: []*config.ModelConfig{
-			{ModelName: "my-gpt", Model: "openai/gpt-4o", APIKeys: config.SimpleSecureStrings("key")},
-		},
-	}
+	cfg := config.DefaultConfig()
 	populateCandidateProvidersFromNames(cfg, t.TempDir(), nil, out)
 	if len(out) != 0 {
 		t.Fatalf("expected empty map, got %d entries", len(out))
 	}
 }
 
-// TestPopulateCandidateProviders_EmptyModelListIsNoop verifies the early-exit
-// path when model_list is empty — no provider can be created.
-func TestPopulateCandidateProviders_EmptyModelListIsNoop(t *testing.T) {
-	out := map[string]providers.LLMProvider{}
-	cfg := &config.Config{}
-	populateCandidateProvidersFromNames(cfg, t.TempDir(), []string{"gpt-4o"}, out)
-	if len(out) != 0 {
-		t.Fatalf("expected empty map, got %d entries", len(out))
-	}
-}
-
-// TestPopulateCandidateProviders_UnmatchedNameIsSkipped verifies that a
-// name with no matching model_list entry is skipped and does not
-// cause a panic or leave a nil entry in the map.
-func TestPopulateCandidateProviders_UnmatchedNameIsSkipped(t *testing.T) {
-	out := map[string]providers.LLMProvider{}
-	cfg := &config.Config{
-		ModelList: []*config.ModelConfig{
-			{ModelName: "my-gpt", Model: "openai/gpt-4o", APIKeys: config.SimpleSecureStrings("key")},
-		},
-	}
-	populateCandidateProvidersFromNames(cfg, t.TempDir(), []string{"nonexistent-model"}, out)
-
-	if len(out) != 0 {
-		t.Fatalf("expected empty map for unmatched name, got %d entries", len(out))
-	}
-}
-
-// TestNewAgentInstance_CandidateProvidersPopulatedForCrossProviderFallbacks
-// mirrors the exact scenario from bug #2140: primary model on OpenRouter with
-// Gemini fallbacks. Each entry must get its own provider instance so that
-// fallback requests go to the correct API endpoint, not the primary's.
-func TestNewAgentInstance_CandidateProvidersPopulatedForCrossProviderFallbacks(t *testing.T) {
+func TestNewAgentInstance_CandidateProvidersPopulatedForConfiguredFallbacks(t *testing.T) {
 	workspace := t.TempDir()
 
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:      workspace,
-				ModelName:      "mistral-small-3.1",
-				ModelFallbacks: []string{"gemma-3-27b", "gemini-images"},
-			},
-		},
-		ModelList: []*config.ModelConfig{
-			{
-				ModelName: "mistral-small-3.1",
-				Model:     "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
-				APIBase:   "https://openrouter.ai/api/v1",
-				APIKeys:   config.SimpleSecureStrings("sk-or-test"),
-				Workspace: workspace,
-			},
-			{
-				ModelName: "gemma-3-27b",
-				Model:     "gemini/gemma-3-27b-it",
-				APIKeys:   config.SimpleSecureStrings("AIzaSy-test"),
-				Workspace: workspace,
-			},
-			{
-				ModelName: "gemini-images",
-				Model:     "gemini/gemini-2.5-flash-lite",
-				APIKeys:   config.SimpleSecureStrings("AIzaSy-test"),
-				Workspace: workspace,
-			},
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Workspace = workspace
+	cfg.Agents.Defaults.ModelName = "gpt-5.4"
+	cfg.Agents.Defaults.ModelFallbacks = []string{"gpt-5.4-mini", "deepseek-chat"}
+	cfg.Runtime.Fallback.DeepSeek.Enabled = true
+	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
+	cfg.Runtime.Fallback.DeepSeek.APIBase = "https://api.deepseek.com/v1"
 
 	primaryProvider := &mockProvider{}
 	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, primaryProvider)
 
-	// Only fallback models need entries — the primary uses the injected provider directly.
 	wantKeys := []string{
-		providers.ModelKey("gemini", "gemma-3-27b-it"),
-		providers.ModelKey("gemini", "gemini-2.5-flash-lite"),
+		providers.ModelKey("codex", "gpt-5.4-mini"),
+		providers.ModelKey("deepseek", "deepseek-chat"),
 	}
 
 	for _, key := range wantKeys {
