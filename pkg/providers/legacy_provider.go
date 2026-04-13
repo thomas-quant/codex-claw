@@ -20,7 +20,10 @@ func CreateProvider(cfg *config.Config) (LLMProvider, string, error) {
 		return nil, "", fmt.Errorf("config is nil")
 	}
 
-	model := strings.TrimSpace(cfg.Runtime.Codex.DefaultModel)
+	model := explicitAgentModel(cfg)
+	if model == "" {
+		model = strings.TrimSpace(cfg.Runtime.Codex.DefaultModel)
+	}
 	if model == "" {
 		return nil, "", fmt.Errorf("runtime.codex.default_model is required")
 	}
@@ -31,4 +34,31 @@ func CreateProvider(cfg *config.Config) (LLMProvider, string, error) {
 	}
 
 	return NewCodexAppServerProvider(newCodexAppServerRunner(workspace, 0)), model, nil
+}
+
+func explicitAgentModel(cfg *config.Config) string {
+	if cfg == nil || len(cfg.Agents.List) == 0 {
+		return ""
+	}
+
+	for i := range cfg.Agents.List {
+		agent := &cfg.Agents.List[i]
+		if !agent.Default {
+			continue
+		}
+		if agent.Model != nil {
+			if model := strings.TrimSpace(agent.Model.Primary); model != "" {
+				return model
+			}
+		}
+	}
+
+	if len(cfg.Agents.List) == 1 {
+		agent := &cfg.Agents.List[0]
+		if agent.Model != nil {
+			return strings.TrimSpace(agent.Model.Primary)
+		}
+	}
+
+	return ""
 }

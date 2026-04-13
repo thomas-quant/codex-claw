@@ -9,6 +9,15 @@ import (
 func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Runtime.Codex.DefaultModel = "gpt-5.4-codex"
+	cfg.Agents.List = []config.AgentConfig{
+		{
+			ID:      "main",
+			Default: true,
+			Model: &config.AgentModelConfig{
+				Primary: "openai/gpt-4o",
+			},
+		},
+	}
 
 	provider, model, err := CreateProvider(cfg)
 	if err != nil {
@@ -21,12 +30,24 @@ func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
 	if _, ok := provider.(*CodexAppServerProvider); !ok {
 		t.Fatalf("CreateProvider() provider type = %T, want *CodexAppServerProvider", provider)
 	}
+	if model != "openai/gpt-4o" {
+		t.Fatalf("CreateProvider() model = %q, want %q", model, "openai/gpt-4o")
+	}
+
+	cfg.Agents.List = nil
+	provider, model, err = CreateProvider(cfg)
+	if err != nil {
+		t.Fatalf("CreateProvider() fallback error = %v", err)
+	}
+	if _, ok := provider.(*CodexAppServerProvider); !ok {
+		t.Fatalf("CreateProvider() fallback provider type = %T, want *CodexAppServerProvider", provider)
+	}
 	if model != "gpt-5.4-codex" {
-		t.Fatalf("CreateProvider() model = %q, want %q", model, "gpt-5.4-codex")
+		t.Fatalf("CreateProvider() fallback model = %q, want %q", model, "gpt-5.4-codex")
 	}
 }
 
-func TestDeepSeekFallbackCandidate_UsesRuntimeBlock(t *testing.T) {
+func TestCreateDeepSeekFallbackCandidate_UsesRuntimeBlock(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Runtime.Fallback.DeepSeek.Enabled = true
 	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-reasoner"
