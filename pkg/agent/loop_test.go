@@ -449,112 +449,684 @@ func (fakeInteractiveTool) Execute(_ context.Context, args map[string]any) *tool
 	return tools.NewToolResult(fmt.Sprintf("weather for %v: sunny", args["city"]))
 }
 
+type loopAsyncFollowUpTool struct{}
+
+func (loopAsyncFollowUpTool) Name() string { return "async_follow_up" }
+
+func (loopAsyncFollowUpTool) Description() string { return "Publishes a follow-up asynchronously" }
+
+func (loopAsyncFollowUpTool) Parameters() map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
+}
+
+func (loopAsyncFollowUpTool) Execute(_ context.Context, _ map[string]any) *tools.ToolResult {
+	return tools.AsyncResult("async started")
+}
+
+func (loopAsyncFollowUpTool) ExecuteAsync(
+	ctx context.Context,
+	args map[string]any,
+	cb tools.AsyncCallback,
+) *tools.ToolResult {
+	if cb != nil {
+		cb(ctx, tools.UserResult("async follow-up ready"))
+	}
+	return tools.AsyncResult("async started")
+}
+
+type toolDecisionHook struct {
+	beforeDenied   map[string]string
+	approvalDenied map[string]string
+	beforeRespond  map[string]*tools.ToolResult
+	afterModified  map[string]*tools.ToolResult
+}
+
+func (h *toolDecisionHook) BeforeTool(
+	ctx context.Context,
+	call *ToolCallHookRequest,
+) (*ToolCallHookRequest, HookDecision, error) {
+	if reason, ok := h.beforeDenied[call.Tool]; ok {
+		return call.Clone(), HookDecision{Action: HookActionDenyTool, Reason: reason}, nil
+	}
+	if result, ok := h.beforeRespond[call.Tool]; ok {
+		next := call.Clone()
+		next.HookResult = cloneToolResult(result)
+		return next, HookDecision{Action: HookActionRespond}, nil
+	}
+	return call.Clone(), HookDecision{Action: HookActionContinue}, nil
+}
+
+func (h *toolDecisionHook) AfterTool(
+	ctx context.Context,
+	result *ToolResultHookResponse,
+) (*ToolResultHookResponse, HookDecision, error) {
+	if modifiedResult, ok := h.afterModified[result.Tool]; ok {
+		next := result.Clone()
+		next.Result = cloneToolResult(modifiedResult)
+		return next, HookDecision{Action: HookActionModify}, nil
+	}
+	return result.Clone(), HookDecision{Action: HookActionContinue}, nil
+}
+
+func (h *toolDecisionHook) ApproveTool(
+	ctx context.Context,
+	req *ToolApprovalRequest,
+) (ApprovalDecision, error) {
+	if reason, ok := h.approvalDenied[req.Tool]; ok {
+		return ApprovalDecision{Approved: false, Reason: reason}, nil
+	}
+	return ApprovalDecision{Approved: true}, nil
+}
+
 func TestAgentLoop_InteractiveProviderToolCallbackUsesAgentToolExecution(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				ModelName:         "test-model",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
+	t.Run("successful tool execution", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
 			},
-		},
-	}
+		}
 
-	msgBus := bus.NewMessageBus()
-	provider := &interactiveLoopProvider{
-		finalContent: "done",
-		toolCall: providers.InteractiveToolCall{
-			CallID: "call-1",
-			Name:   "lookup_weather",
-			Arguments: map[string]any{
-				"city": "London",
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID: "call-1",
+				Name:   "lookup_weather",
+				Arguments: map[string]any{
+					"city": "London",
+				},
 			},
-		},
-	}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	al.RegisterTool(fakeInteractiveTool{})
-	streamChannel := &fakeStreamingChannel{fakeChannel: fakeChannel{id: "rid-telegram"}}
-	al.SetChannelManager(newStartedTestChannelManager(t, msgBus, media.NewFileMediaStore(), "telegram", streamChannel))
-
-	runCtx, runCancel := context.WithCancel(context.Background())
-	defer runCancel()
-
-	runDone := make(chan error, 1)
-	go func() {
-		runDone <- al.Run(runCtx)
-	}()
-
-	if err := msgBus.PublishInbound(context.Background(), bus.InboundMessage{
-		Channel:  "telegram",
-		ChatID:   "chat-1",
-		SenderID: "user-1",
-		Content:  "use the tool",
-	}); err != nil {
-		t.Fatalf("PublishInbound() error = %v", err)
-	}
-
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		_, interactiveCalled, _, results := provider.snapshot()
-		if interactiveCalled && len(results) == 1 {
-			break
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		streamChannel := &fakeStreamingChannel{fakeChannel: fakeChannel{id: "rid-telegram"}}
+		al.SetChannelManager(newStartedTestChannelManager(t, msgBus, media.NewFileMediaStore(), "telegram", streamChannel))
 
-	runCancel()
-	select {
-	case err := <-runDone:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("Run() error = %v", err)
+		runCtx, runCancel := context.WithCancel(context.Background())
+		defer runCancel()
+
+		runDone := make(chan error, 1)
+		go func() {
+			runDone <- al.Run(runCtx)
+		}()
+
+		if err := msgBus.PublishInbound(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		}); err != nil {
+			t.Fatalf("PublishInbound() error = %v", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run() did not stop")
-	}
 
-	chatCalled, interactiveCalled, reqs, results := provider.snapshot()
-	if chatCalled {
-		t.Fatal("expected Chat() path to remain unused")
-	}
-	if !interactiveCalled {
-		t.Fatal("expected interactive path to be used")
-	}
-	if len(reqs) != 1 {
-		t.Fatalf("interactive requests = %d, want 1", len(reqs))
-	}
-	if reqs[0].ExecuteTool == nil {
-		t.Fatal("interactive request ExecuteTool callback was nil")
-	}
-	if len(results) != 1 {
-		t.Fatalf("tool callback results = %d, want 1", len(results))
-	}
-	if !results[0].Success {
-		t.Fatalf("tool callback success = %v, want true", results[0].Success)
-	}
-	if len(results[0].ContentItems) != 1 || !strings.Contains(results[0].ContentItems[0].Text, "London") {
-		t.Fatalf("tool callback result = %#v, want weather text for London", results[0])
-	}
-
-	mainAgent, ok := al.GetRegistry().GetAgent("main")
-	if !ok {
-		t.Fatal("main agent not found")
-	}
-	history := mainAgent.Sessions.GetHistory(reqs[0].SessionKey)
-	if len(history) == 0 {
-		t.Fatal("expected session history to contain interactive tool messages")
-	}
-	foundToolMessage := false
-	for _, msg := range history {
-		if msg.Role == "tool" && strings.Contains(msg.Content, "London") {
-			foundToolMessage = true
-			break
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			_, interactiveCalled, _, results := provider.snapshot()
+			if interactiveCalled && len(results) == 1 {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-	}
-	if !foundToolMessage {
-		t.Fatalf("session history = %#v, want persisted tool result", history)
-	}
+
+		runCancel()
+		select {
+		case err := <-runDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run() error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Run() did not stop")
+		}
+
+		chatCalled, interactiveCalled, reqs, results := provider.snapshot()
+		if chatCalled {
+			t.Fatal("expected Chat() path to remain unused")
+		}
+		if !interactiveCalled {
+			t.Fatal("expected interactive path to be used")
+		}
+		if len(reqs) != 1 {
+			t.Fatalf("interactive requests = %d, want 1", len(reqs))
+		}
+		if reqs[0].ExecuteTool == nil {
+			t.Fatal("interactive request ExecuteTool callback was nil")
+		}
+		if len(results) != 1 {
+			t.Fatalf("tool callback results = %d, want 1", len(results))
+		}
+		if !results[0].Success {
+			t.Fatalf("tool callback success = %v, want true", results[0].Success)
+		}
+		if len(results[0].ContentItems) != 1 || !strings.Contains(results[0].ContentItems[0].Text, "London") {
+			t.Fatalf("tool callback result = %#v, want weather text for London", results[0])
+		}
+
+		mainAgent, ok := al.GetRegistry().GetAgent("main")
+		if !ok {
+			t.Fatal("main agent not found")
+		}
+		history := mainAgent.Sessions.GetHistory(reqs[0].SessionKey)
+		if len(history) == 0 {
+			t.Fatal("expected session history to contain interactive tool messages")
+		}
+		foundToolMessage := false
+		for _, msg := range history {
+			if msg.Role == "tool" && strings.Contains(msg.Content, "London") {
+				foundToolMessage = true
+				break
+			}
+		}
+		if !foundToolMessage {
+			t.Fatalf("session history = %#v, want persisted tool result", history)
+		}
+	})
+
+	t.Run("hook denial", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-denied",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("deny-before", &toolDecisionHook{
+			beforeDenied: map[string]string{"lookup_weather": "blocked by before hook"},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if results[0].Success {
+			t.Fatalf("tool callback success = %v, want false", results[0].Success)
+		}
+		if len(results[0].ContentItems) != 1 {
+			t.Fatalf("tool callback content items = %d, want 1", len(results[0].ContentItems))
+		}
+		want := "Tool execution denied by hook: blocked by before hook"
+		if results[0].ContentItems[0].Text != want {
+			t.Fatalf("tool callback text = %q, want %q", results[0].ContentItems[0].Text, want)
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundDenied := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == want {
+				foundDenied = true
+				break
+			}
+		}
+		if !foundDenied {
+			t.Fatalf("session history = %#v, want denied tool message", history)
+		}
+	})
+
+	t.Run("approval denial", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-denied",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("deny-approval", &toolDecisionHook{
+			approvalDenied: map[string]string{"lookup_weather": "approval blocked"},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if results[0].Success {
+			t.Fatalf("tool callback success = %v, want false", results[0].Success)
+		}
+		want := "Tool execution denied by approval hook: approval blocked"
+		if len(results[0].ContentItems) != 1 || results[0].ContentItems[0].Text != want {
+			t.Fatalf("tool callback result = %#v, want %q", results[0], want)
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundDenied := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == want {
+				foundDenied = true
+				break
+			}
+		}
+		if !foundDenied {
+			t.Fatalf("session history = %#v, want approval denial message", history)
+		}
+	})
+
+	t.Run("before hook respond result", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-respond",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("respond-before", &toolDecisionHook{
+			beforeRespond: map[string]*tools.ToolResult{
+				"lookup_weather": tools.NewToolResult("Hook handled weather for London."),
+			},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if !results[0].Success {
+			t.Fatalf("tool callback success = %v, want true", results[0].Success)
+		}
+		if len(results[0].ContentItems) != 1 || results[0].ContentItems[0].Text != "Hook handled weather for London." {
+			t.Fatalf("tool callback result = %#v, want hook response", results[0])
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundResponded := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == "Hook handled weather for London." {
+				foundResponded = true
+				break
+			}
+		}
+		if !foundResponded {
+			t.Fatalf("session history = %#v, want responded tool message", history)
+		}
+	})
+
+	t.Run("after hook modify result", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-after-modify",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("modify-after", &toolDecisionHook{
+			afterModified: map[string]*tools.ToolResult{
+				"lookup_weather": tools.NewToolResult("After hook rewrote the weather result."),
+			},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if !results[0].Success {
+			t.Fatalf("tool callback success = %v, want true", results[0].Success)
+		}
+		if len(results[0].ContentItems) != 1 || results[0].ContentItems[0].Text != "After hook rewrote the weather result." {
+			t.Fatalf("tool callback result = %#v, want modified response", results[0])
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundModified := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == "After hook rewrote the weather result." {
+				foundModified = true
+				break
+			}
+		}
+		if !foundModified {
+			t.Fatalf("session history = %#v, want modified tool message", history)
+		}
+	})
+
+	t.Run("async follow-up publication", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-async",
+				Name:      "async_follow_up",
+				Arguments: map[string]any{},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(loopAsyncFollowUpTool{})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use async tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, _, results := provider.snapshot()
+		if len(results) != 1 || !results[0].Success {
+			t.Fatalf("tool callback result = %#v, want one successful result", results)
+		}
+
+		select {
+		case outbound := <-msgBus.OutboundChan():
+			if outbound.Content != "async follow-up ready" {
+				t.Fatalf("async outbound content = %q, want %q", outbound.Content, "async follow-up ready")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for async outbound publication")
+		}
+
+		select {
+		case inbound := <-msgBus.InboundChan():
+			if inbound.Channel != "system" {
+				t.Fatalf("async inbound channel = %q, want system", inbound.Channel)
+			}
+			if inbound.SenderID != "async:async_follow_up" {
+				t.Fatalf("async inbound sender = %q, want %q", inbound.SenderID, "async:async_follow_up")
+			}
+			if inbound.Content != "async follow-up ready" {
+				t.Fatalf("async inbound content = %q, want %q", inbound.Content, "async follow-up ready")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for async inbound publication")
+		}
+	})
+
+	t.Run("handled media response", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-media",
+				Name:      "handled_media_tool",
+				Arguments: map[string]any{},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+
+		store := media.NewFileMediaStore()
+		al.SetMediaStore(store)
+		telegramChannel := &fakeMediaChannel{fakeChannel: fakeChannel{id: "rid-telegram"}}
+		al.SetChannelManager(newStartedTestChannelManager(t, msgBus, store, "telegram", telegramChannel))
+
+		imagePath := filepath.Join(tmpDir, "screen.png")
+		if err := os.WriteFile(imagePath, []byte("fake screenshot"), 0o644); err != nil {
+			t.Fatalf("WriteFile(imagePath) error = %v", err)
+		}
+		al.RegisterTool(&handledMediaTool{store: store, path: imagePath})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "send a screenshot",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if len(results[0].ContentItems) != 1 || !strings.Contains(results[0].ContentItems[0].Text, "already been delivered") {
+			t.Fatalf("tool callback result = %#v, want handled-delivery note", results[0])
+		}
+		if len(telegramChannel.sentMedia) != 1 {
+			t.Fatalf("sent media count = %d, want 1", len(telegramChannel.sentMedia))
+		}
+
+		select {
+		case extra := <-msgBus.OutboundMediaChan():
+			t.Fatalf("expected handled media to bypass async queue, got %+v", extra)
+		default:
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundHandled := false
+		for _, msg := range history {
+			if msg.Role == "tool" && strings.Contains(msg.Content, "already been delivered") {
+				foundHandled = true
+				break
+			}
+		}
+		if !foundHandled {
+			t.Fatalf("session history = %#v, want handled tool message", history)
+		}
+	})
+
+	t.Run("artifact media is forwarded to follow-up tools", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := config.DefaultConfig()
+		cfg.Agents.Defaults.Workspace = tmpDir
+		cfg.Agents.Defaults.ModelName = "test-model"
+		cfg.Agents.Defaults.MaxTokens = 4096
+		cfg.Agents.Defaults.MaxToolIterations = 10
+
+		msgBus := bus.NewMessageBus()
+		provider := &interactiveLoopProvider{
+			finalContent: "done",
+			toolCall: providers.InteractiveToolCall{
+				CallID:    "call-artifact-media",
+				Name:      "media_artifact_tool",
+				Arguments: map[string]any{},
+			},
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+
+		store := media.NewFileMediaStore()
+		al.SetMediaStore(store)
+		telegramChannel := &fakeMediaChannel{fakeChannel: fakeChannel{id: "rid-telegram"}}
+		al.SetChannelManager(newStartedTestChannelManager(t, msgBus, store, "telegram", telegramChannel))
+
+		mediaDir := media.TempDir()
+		if err := os.MkdirAll(mediaDir, 0o700); err != nil {
+			t.Fatalf("MkdirAll(mediaDir) error = %v", err)
+		}
+		imagePath := filepath.Join(mediaDir, "interactive-artifact-screen.png")
+		if err := os.WriteFile(imagePath, []byte("fake screenshot"), 0o644); err != nil {
+			t.Fatalf("WriteFile(imagePath) error = %v", err)
+		}
+
+		al.RegisterTool(&mediaArtifactTool{
+			store: store,
+			path:  imagePath,
+		})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "make an artifact",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		_, _, reqs, results := provider.snapshot()
+		if len(reqs) != 1 || len(results) != 1 {
+			t.Fatalf("interactive reqs/results = %d/%d, want 1/1", len(reqs), len(results))
+		}
+		if !results[0].Success {
+			t.Fatalf("tool callback success = %v, want true", results[0].Success)
+		}
+		if len(results[0].ContentItems) != 1 || !strings.Contains(results[0].ContentItems[0].Text, "[file:") {
+			t.Fatalf("tool callback result = %#v, want artifact-tagged content", results[0])
+		}
+
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(reqs[0].SessionKey)
+		foundArtifactMedia := false
+		for _, msg := range history {
+			if msg.Role == "tool" && len(msg.Media) == 1 && strings.Contains(msg.Content, "[file:") {
+				foundArtifactMedia = true
+				break
+			}
+		}
+		if !foundArtifactMedia {
+			t.Fatalf("session history = %#v, want tool message with artifact media and tag", history)
+		}
+	})
 }
 
 func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *testing.T) {
@@ -2532,82 +3104,400 @@ func TestProcessMessage_UsesRouteSessionKey(t *testing.T) {
 }
 
 func TestProcessMessage_CommandOutcomes(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "agent-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	t.Run("command routing outcomes", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "agent-test-*")
+		if err != nil {
+			t.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
 
-	cfg := &config.Config{
-		Agents: config.AgentsConfig{
-			Defaults: config.AgentDefaults{
-				Workspace:         tmpDir,
-				ModelName:         "test-model",
-				MaxTokens:         4096,
-				MaxToolIterations: 10,
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
 			},
-		},
-		Session: config.SessionConfig{
-			DMScope: "per-channel-peer",
-		},
-	}
+			Session: config.SessionConfig{
+				DMScope: "per-channel-peer",
+			},
+		}
 
-	msgBus := bus.NewMessageBus()
-	provider := &countingMockProvider{response: "LLM reply"}
-	al := NewAgentLoop(cfg, msgBus, provider)
-	helper := testHelper{al: al}
+		msgBus := bus.NewMessageBus()
+		provider := &countingMockProvider{response: "LLM reply"}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		helper := testHelper{al: al}
 
-	baseMsg := bus.InboundMessage{
-		Channel:  "telegram",
-		SenderID: "user1",
-		ChatID:   "chat1",
-		Peer: bus.Peer{
-			Kind: "direct",
-			ID:   "user1",
-		},
-	}
+		baseMsg := bus.InboundMessage{
+			Channel:  "telegram",
+			SenderID: "user1",
+			ChatID:   "chat1",
+			Peer: bus.Peer{
+				Kind: "direct",
+				ID:   "user1",
+			},
+		}
 
-	showResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  baseMsg.Channel,
-		SenderID: baseMsg.SenderID,
-		ChatID:   baseMsg.ChatID,
-		Content:  "/show channel",
-		Peer:     baseMsg.Peer,
+		showResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
+			Channel:  baseMsg.Channel,
+			SenderID: baseMsg.SenderID,
+			ChatID:   baseMsg.ChatID,
+			Content:  "/show channel",
+			Peer:     baseMsg.Peer,
+		})
+		if showResp != "Current Channel: telegram" {
+			t.Fatalf("unexpected /show reply: %q", showResp)
+		}
+		if provider.calls != 0 {
+			t.Fatalf("LLM should not be called for handled command, calls=%d", provider.calls)
+		}
+
+		fooResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
+			Channel:  baseMsg.Channel,
+			SenderID: baseMsg.SenderID,
+			ChatID:   baseMsg.ChatID,
+			Content:  "/foo",
+			Peer:     baseMsg.Peer,
+		})
+		if fooResp != "LLM reply" {
+			t.Fatalf("unexpected /foo reply: %q", fooResp)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("LLM should be called exactly once after /foo passthrough, calls=%d", provider.calls)
+		}
+
+		newResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
+			Channel:  baseMsg.Channel,
+			SenderID: baseMsg.SenderID,
+			ChatID:   baseMsg.ChatID,
+			Content:  "/new",
+			Peer:     baseMsg.Peer,
+		})
+		if newResp != "LLM reply" {
+			t.Fatalf("unexpected /new reply: %q", newResp)
+		}
+		if provider.calls != 2 {
+			t.Fatalf("LLM should be called for passthrough /new command, calls=%d", provider.calls)
+		}
 	})
-	if showResp != "Current Channel: telegram" {
-		t.Fatalf("unexpected /show reply: %q", showResp)
-	}
-	if provider.calls != 0 {
-		t.Fatalf("LLM should not be called for handled command, calls=%d", provider.calls)
-	}
 
-	fooResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  baseMsg.Channel,
-		SenderID: baseMsg.SenderID,
-		ChatID:   baseMsg.ChatID,
-		Content:  "/foo",
-		Peer:     baseMsg.Peer,
-	})
-	if fooResp != "LLM reply" {
-		t.Fatalf("unexpected /foo reply: %q", fooResp)
-	}
-	if provider.calls != 1 {
-		t.Fatalf("LLM should be called exactly once after /foo passthrough, calls=%d", provider.calls)
-	}
+	t.Run("successful tool execution", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
 
-	newResp := helper.executeAndGetResponse(t, context.Background(), bus.InboundMessage{
-		Channel:  baseMsg.Channel,
-		SenderID: baseMsg.SenderID,
-		ChatID:   baseMsg.ChatID,
-		Content:  "/new",
-		Peer:     baseMsg.Peer,
+		msgBus := bus.NewMessageBus()
+		provider := &multiToolProvider{
+			toolCalls: []providers.ToolCall{{
+				ID:        "call-1",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			}},
+			finalContent: "tool finished",
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "tool finished" {
+			t.Fatalf("response = %q, want %q", response, "tool finished")
+		}
+		if provider.callCount != 2 {
+			t.Fatalf("provider call count = %d, want 2", provider.callCount)
+		}
+
+		route, _, err := al.resolveMessageRoute(bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("resolveMessageRoute() error = %v", err)
+		}
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(resolveScopeKey(route, ""))
+		foundToolMessage := false
+		for _, msg := range history {
+			if msg.Role == "tool" && strings.Contains(msg.Content, "London") {
+				foundToolMessage = true
+				break
+			}
+		}
+		if !foundToolMessage {
+			t.Fatalf("session history = %#v, want persisted tool result", history)
+		}
 	})
-	if newResp != "LLM reply" {
-		t.Fatalf("unexpected /new reply: %q", newResp)
-	}
-	if provider.calls != 2 {
-		t.Fatalf("LLM should be called for passthrough /new command, calls=%d", provider.calls)
-	}
+
+	t.Run("hook denial", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &multiToolProvider{
+			toolCalls: []providers.ToolCall{{
+				ID:        "call-1",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			}},
+			finalContent: "after denial",
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("deny-before", &toolDecisionHook{
+			beforeDenied: map[string]string{"lookup_weather": "blocked by before hook"},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "after denial" {
+			t.Fatalf("response = %q, want %q", response, "after denial")
+		}
+
+		want := "Tool execution denied by hook: blocked by before hook"
+		route, _, err := al.resolveMessageRoute(bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("resolveMessageRoute() error = %v", err)
+		}
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(resolveScopeKey(route, ""))
+		foundDenied := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == want {
+				foundDenied = true
+				break
+			}
+		}
+		if !foundDenied {
+			t.Fatalf("session history = %#v, want denied tool message", history)
+		}
+	})
+
+	t.Run("approval denial", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &multiToolProvider{
+			toolCalls: []providers.ToolCall{{
+				ID:        "call-1",
+				Name:      "lookup_weather",
+				Arguments: map[string]any{"city": "London"},
+			}},
+			finalContent: "after approval denial",
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(fakeInteractiveTool{})
+		if err := al.MountHook(NamedHook("deny-approval", &toolDecisionHook{
+			approvalDenied: map[string]string{"lookup_weather": "approval blocked"},
+		})); err != nil {
+			t.Fatalf("MountHook() error = %v", err)
+		}
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "after approval denial" {
+			t.Fatalf("response = %q, want %q", response, "after approval denial")
+		}
+
+		want := "Tool execution denied by approval hook: approval blocked"
+		route, _, err := al.resolveMessageRoute(bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use the tool",
+		})
+		if err != nil {
+			t.Fatalf("resolveMessageRoute() error = %v", err)
+		}
+		history := al.GetRegistry().GetDefaultAgent().Sessions.GetHistory(resolveScopeKey(route, ""))
+		foundDenied := false
+		for _, msg := range history {
+			if msg.Role == "tool" && msg.Content == want {
+				foundDenied = true
+				break
+			}
+		}
+		if !foundDenied {
+			t.Fatalf("session history = %#v, want approval denial message", history)
+		}
+	})
+
+	t.Run("async follow-up publication", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &multiToolProvider{
+			toolCalls: []providers.ToolCall{{
+				ID:        "call-async",
+				Name:      "async_follow_up",
+				Arguments: map[string]any{},
+			}},
+			finalContent: "done",
+		}
+		al := NewAgentLoop(cfg, msgBus, provider)
+		al.RegisterTool(loopAsyncFollowUpTool{})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat-1",
+			SenderID: "user-1",
+			Content:  "use async tool",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "done" {
+			t.Fatalf("response = %q, want %q", response, "done")
+		}
+
+		select {
+		case outbound := <-msgBus.OutboundChan():
+			if outbound.Content != "async follow-up ready" {
+				t.Fatalf("async outbound content = %q, want %q", outbound.Content, "async follow-up ready")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for async outbound publication")
+		}
+
+		select {
+		case inbound := <-msgBus.InboundChan():
+			if inbound.Channel != "system" {
+				t.Fatalf("async inbound channel = %q, want system", inbound.Channel)
+			}
+			if inbound.SenderID != "async:async_follow_up" {
+				t.Fatalf("async inbound sender = %q, want %q", inbound.SenderID, "async:async_follow_up")
+			}
+			if inbound.Content != "async follow-up ready" {
+				t.Fatalf("async inbound content = %q, want %q", inbound.Content, "async follow-up ready")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for async inbound publication")
+		}
+	})
+
+	t.Run("handled media response", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfg := &config.Config{
+			Agents: config.AgentsConfig{
+				Defaults: config.AgentDefaults{
+					Workspace:         tmpDir,
+					ModelName:         "test-model",
+					MaxTokens:         4096,
+					MaxToolIterations: 10,
+				},
+			},
+		}
+
+		msgBus := bus.NewMessageBus()
+		provider := &handledMediaProvider{}
+		al := NewAgentLoop(cfg, msgBus, provider)
+
+		store := media.NewFileMediaStore()
+		al.SetMediaStore(store)
+		telegramChannel := &fakeMediaChannel{fakeChannel: fakeChannel{id: "rid-telegram"}}
+		al.SetChannelManager(newStartedTestChannelManager(t, msgBus, store, "telegram", telegramChannel))
+
+		imagePath := filepath.Join(tmpDir, "screen.png")
+		if err := os.WriteFile(imagePath, []byte("fake screenshot"), 0o644); err != nil {
+			t.Fatalf("WriteFile(imagePath) error = %v", err)
+		}
+
+		al.RegisterTool(&handledMediaTool{
+			store: store,
+			path:  imagePath,
+		})
+
+		response, err := al.processMessage(context.Background(), bus.InboundMessage{
+			Channel:  "telegram",
+			ChatID:   "chat1",
+			SenderID: "user1",
+			Content:  "take a screenshot of the screen and send it to me",
+		})
+		if err != nil {
+			t.Fatalf("processMessage() error = %v", err)
+		}
+		if response != "" {
+			t.Fatalf("expected no final response when media tool already handled delivery, got %q", response)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected exactly 1 LLM call, got %d", provider.calls)
+		}
+		if len(telegramChannel.sentMedia) != 1 {
+			t.Fatalf("expected exactly 1 synchronously sent media message, got %d", len(telegramChannel.sentMedia))
+		}
+
+		select {
+		case extra := <-msgBus.OutboundMediaChan():
+			t.Fatalf("expected handled media to bypass async queue, got %+v", extra)
+		default:
+		}
+	})
 }
 
 // TestToolResult_SilentToolDoesNotSendUserMessage verifies silent tools don't trigger outbound

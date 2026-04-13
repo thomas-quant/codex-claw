@@ -2582,566 +2582,87 @@ turnLoop:
 
 			toolName := tc.Name
 			toolArgs := cloneStringAnyMap(tc.Arguments)
-
-			if al.hooks != nil {
-				toolReq, decision := al.hooks.BeforeTool(turnCtx, &ToolCallHookRequest{
-					Meta:      ts.eventMeta("runTurn", "turn.tool.before"),
-					Tool:      toolName,
-					Arguments: toolArgs,
-					Channel:   ts.channel,
-					ChatID:    ts.chatID,
-				})
-				switch decision.normalizedAction() {
-				case HookActionContinue, HookActionModify:
-					if toolReq != nil {
-						toolName = toolReq.Tool
-						toolArgs = toolReq.Arguments
-					}
-				case HookActionRespond:
-					// Hook returns result directly, skip tool execution.
-					// SECURITY: This bypasses ApproveTool, allowing hooks to respond
-					// for any tool name without approval. This is intentional for
-					// plugin tools but means a before_tool hook can override even
-					// sensitive tools like bash. Hook configuration should be
-					// carefully reviewed to prevent unauthorized tool execution.
-					if toolReq != nil && toolReq.HookResult != nil {
-						hookResult := toolReq.HookResult
-
-						argsJSON, _ := json.Marshal(toolArgs)
-						argsPreview := utils.Truncate(string(argsJSON), 200)
-						logger.InfoCF("agent", fmt.Sprintf("Tool call (hook respond): %s(%s)", toolName, argsPreview),
-							map[string]any{
-								"agent_id":  ts.agent.ID,
-								"tool":      toolName,
-								"iteration": iteration,
-							})
-
-						// Emit ToolExecStart event (same as normal tool execution)
-						al.emitEvent(
-							EventKindToolExecStart,
-							ts.eventMeta("runTurn", "turn.tool.start"),
-							ToolExecStartPayload{
-								Tool:      toolName,
-								Arguments: cloneEventArguments(toolArgs),
-							},
-						)
-
-						// Send tool feedback to chat channel if enabled (same as normal tool execution)
-						if al.cfg.Agents.Defaults.IsToolFeedbackEnabled() &&
-							ts.channel != "" &&
-							!ts.opts.SuppressToolFeedback {
-							argsJSON, _ := json.Marshal(toolArgs)
-							feedbackPreview := utils.Truncate(
-								string(argsJSON),
-								al.cfg.Agents.Defaults.GetToolFeedbackMaxArgsLength(),
-							)
-							feedbackMsg := utils.FormatToolFeedbackMessage(toolName, feedbackPreview)
-							fbCtx, fbCancel := context.WithTimeout(turnCtx, 3*time.Second)
-							_ = al.bus.PublishOutbound(fbCtx, bus.OutboundMessage{
-								Channel: ts.channel,
-								ChatID:  ts.chatID,
-								Content: feedbackMsg,
-							})
-							fbCancel()
-						}
-
-						toolDuration := time.Duration(0) // Hook execution time unknown
-
-						// Send ForUser content to user
-						// For ResponseHandled results, send regardless of SendResponse setting,
-						// same as normal tool execution path.
-						shouldSendForUser := !hookResult.Silent && hookResult.ForUser != "" &&
-							(ts.opts.SendResponse || hookResult.ResponseHandled)
-						if shouldSendForUser {
-							al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-								Channel: ts.channel,
-								ChatID:  ts.chatID,
-								Content: hookResult.ForUser,
-								Metadata: map[string]string{
-									"is_tool_call": "true",
-								},
-							})
-						}
-
-						// Handle media from hook result (same as normal tool execution)
-						if len(hookResult.Media) > 0 && hookResult.ResponseHandled {
-							parts := make([]bus.MediaPart, 0, len(hookResult.Media))
-							for _, ref := range hookResult.Media {
-								part := bus.MediaPart{Ref: ref}
-								if al.mediaStore != nil {
-									if _, meta, err := al.mediaStore.ResolveWithMeta(ref); err == nil {
-										part.Filename = meta.Filename
-										part.ContentType = meta.ContentType
-										part.Type = inferMediaType(meta.Filename, meta.ContentType)
-									}
-								}
-								parts = append(parts, part)
-							}
-							outboundMedia := bus.OutboundMediaMessage{
-								Channel: ts.channel,
-								ChatID:  ts.chatID,
-								Parts:   parts,
-							}
-							if al.channelManager != nil && ts.channel != "" && !constants.IsInternalChannel(ts.channel) {
-								if err := al.channelManager.SendMedia(ctx, outboundMedia); err != nil {
-									logger.WarnCF("agent", "Failed to deliver hook media",
-										map[string]any{
-											"agent_id": ts.agent.ID,
-											"tool":     toolName,
-											"channel":  ts.channel,
-											"chat_id":  ts.chatID,
-											"error":    err.Error(),
-										})
-									// Same as normal tool execution: notify LLM about delivery failure
-									hookResult.IsError = true
-									hookResult.ForLLM = fmt.Sprintf("failed to deliver attachment: %v", err)
-								}
-							} else if al.bus != nil {
-								al.bus.PublishOutboundMedia(ctx, outboundMedia)
-								// Same as normal tool execution: bus only queues, media not yet delivered
-								hookResult.ResponseHandled = false
-							}
-						}
-
-						// Track response handling status (same as normal tool execution)
-						if !hookResult.ResponseHandled {
-							allResponsesHandled = false
-						}
-
-						// Build tool message
-						contentForLLM := hookResult.ContentForLLM()
-						if al.cfg.Tools.IsFilterSensitiveDataEnabled() {
-							contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
-						}
-
-						toolResultMsg := providers.Message{
-							Role:       "tool",
-							Content:    contentForLLM,
-							ToolCallID: tc.ID,
-						}
-
-						// Handle media for LLM vision (same as normal tool execution)
-						if len(hookResult.Media) > 0 && !hookResult.ResponseHandled {
-							hookResult.ArtifactTags = buildArtifactTags(al.mediaStore, hookResult.Media)
-							// Recalculate contentForLLM after adding ArtifactTags
-							contentForLLM = hookResult.ContentForLLM()
-							if al.cfg.Tools.IsFilterSensitiveDataEnabled() {
-								contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
-							}
-							toolResultMsg.Content = contentForLLM
-							toolResultMsg.Media = append(toolResultMsg.Media, hookResult.Media...)
-						}
-
-						// Emit ToolExecEnd event (after filtering, same as normal tool execution)
-						al.emitEvent(
-							EventKindToolExecEnd,
-							ts.eventMeta("runTurn", "turn.tool.end"),
-							ToolExecEndPayload{
-								Tool:       toolName,
-								Duration:   toolDuration,
-								ForLLMLen:  len(contentForLLM),
-								ForUserLen: len(hookResult.ForUser),
-								IsError:    hookResult.IsError,
-								Async:      hookResult.Async,
-							},
-						)
-
-						messages = append(messages, toolResultMsg)
-						if !ts.opts.NoHistory {
-							ts.agent.Sessions.AddFullMessage(ts.sessionKey, toolResultMsg)
-							ts.recordPersistedMessage(toolResultMsg)
-							ts.ingestMessage(turnCtx, al, toolResultMsg)
-						}
-
-						// Same as normal tool execution: check for steering/interrupt/SubTurn after each tool
-						if steerMsgs := al.dequeueSteeringMessagesForScope(ts.sessionKey); len(steerMsgs) > 0 {
-							pendingMessages = append(pendingMessages, steerMsgs...)
-						}
-
-						skipReason := ""
-						skipMessage := ""
-						if len(pendingMessages) > 0 {
-							skipReason = "queued user steering message"
-							skipMessage = "Skipped due to queued user message."
-						} else if gracefulPending, _ := ts.gracefulInterruptRequested(); gracefulPending {
-							skipReason = "graceful interrupt requested"
-							skipMessage = "Skipped due to graceful interrupt."
-						}
-
-						if skipReason != "" {
-							remaining := len(normalizedToolCalls) - i - 1
-							if remaining > 0 {
-								logger.InfoCF("agent", "Turn checkpoint: skipping remaining tools after hook respond",
-									map[string]any{
-										"agent_id":  ts.agent.ID,
-										"completed": i + 1,
-										"skipped":   remaining,
-										"reason":    skipReason,
-									})
-								for j := i + 1; j < len(normalizedToolCalls); j++ {
-									skippedTC := normalizedToolCalls[j]
-									al.emitEvent(
-										EventKindToolExecSkipped,
-										ts.eventMeta("runTurn", "turn.tool.skipped"),
-										ToolExecSkippedPayload{
-											Tool:   skippedTC.Name,
-											Reason: skipReason,
-										},
-									)
-									skippedMsg := providers.Message{
-										Role:       "tool",
-										Content:    skipMessage,
-										ToolCallID: skippedTC.ID,
-									}
-									messages = append(messages, skippedMsg)
-									if !ts.opts.NoHistory {
-										ts.agent.Sessions.AddFullMessage(ts.sessionKey, skippedMsg)
-										ts.recordPersistedMessage(skippedMsg)
-									}
-								}
-							}
-							break
-						}
-
-						// Also poll for any SubTurn results that arrived during tool execution.
-						if ts.pendingResults != nil {
-							select {
-							case result, ok := <-ts.pendingResults:
-								if ok && result != nil && result.ForLLM != "" {
-									content := al.cfg.FilterSensitiveData(result.ForLLM)
-									msg := providers.Message{Role: "user", Content: fmt.Sprintf("[SubTurn Result] %s", content)}
-									messages = append(messages, msg)
-									ts.agent.Sessions.AddFullMessage(ts.sessionKey, msg)
-								}
-							default:
-								// No results available
-							}
-						}
-
-						continue
-					}
-					// If no HookResult, fall back to continue with warning
-					logger.WarnCF("agent", "Hook returned respond action but no HookResult provided",
-						map[string]any{
-							"agent_id": ts.agent.ID,
-							"tool":     toolName,
-							"action":   "respond",
-						})
-				case HookActionDenyTool:
-					allResponsesHandled = false
-					denyContent := hookDeniedToolContent("Tool execution denied by hook", decision.Reason)
-					al.emitEvent(
-						EventKindToolExecSkipped,
-						ts.eventMeta("runTurn", "turn.tool.skipped"),
-						ToolExecSkippedPayload{
-							Tool:   toolName,
-							Reason: denyContent,
-						},
-					)
-					deniedMsg := providers.Message{
-						Role:       "tool",
-						Content:    denyContent,
-						ToolCallID: tc.ID,
-					}
-					messages = append(messages, deniedMsg)
-					if !ts.opts.NoHistory {
-						ts.agent.Sessions.AddFullMessage(ts.sessionKey, deniedMsg)
-						ts.recordPersistedMessage(deniedMsg)
-					}
-					continue
-				case HookActionAbortTurn:
-					turnStatus = TurnEndStatusError
-					return turnResult{}, al.hookAbortError(ts, "before_tool", decision)
-				case HookActionHardAbort:
-					_ = ts.requestHardAbort()
-					turnStatus = TurnEndStatusAborted
-					return al.abortTurn(ts)
-				}
+			before, err := al.applyBeforeToolHooks(turnCtx, ts, "runTurn", toolName, toolArgs, true)
+			if err != nil {
+				turnStatus = TurnEndStatusError
+				return turnResult{}, err
 			}
-
-			if al.hooks != nil {
-				approval := al.hooks.ApproveTool(turnCtx, &ToolApprovalRequest{
-					Meta:      ts.eventMeta("runTurn", "turn.tool.approve"),
-					Tool:      toolName,
-					Arguments: toolArgs,
-					Channel:   ts.channel,
-					ChatID:    ts.chatID,
-				})
-				if !approval.Approved {
-					allResponsesHandled = false
-					denyContent := hookDeniedToolContent("Tool execution denied by approval hook", approval.Reason)
-					al.emitEvent(
-						EventKindToolExecSkipped,
-						ts.eventMeta("runTurn", "turn.tool.skipped"),
-						ToolExecSkippedPayload{
-							Tool:   toolName,
-							Reason: denyContent,
-						},
-					)
-					deniedMsg := providers.Message{
-						Role:       "tool",
-						Content:    denyContent,
-						ToolCallID: tc.ID,
-					}
-					messages = append(messages, deniedMsg)
-					if !ts.opts.NoHistory {
-						ts.agent.Sessions.AddFullMessage(ts.sessionKey, deniedMsg)
-						ts.recordPersistedMessage(deniedMsg)
-					}
-					continue
-				}
-			}
-
-			argsJSON, _ := json.Marshal(toolArgs)
-			argsPreview := utils.Truncate(string(argsJSON), 200)
-			logger.InfoCF("agent", fmt.Sprintf("Tool call: %s(%s)", toolName, argsPreview),
-				map[string]any{
-					"agent_id":  ts.agent.ID,
-					"tool":      toolName,
-					"iteration": iteration,
-				})
-			al.emitEvent(
-				EventKindToolExecStart,
-				ts.eventMeta("runTurn", "turn.tool.start"),
-				ToolExecStartPayload{
-					Tool:      toolName,
-					Arguments: cloneEventArguments(toolArgs),
-				},
-			)
-
-			// Send tool feedback to chat channel if enabled (from HEAD)
-			if al.cfg.Agents.Defaults.IsToolFeedbackEnabled() &&
-				ts.channel != "" &&
-				!ts.opts.SuppressToolFeedback {
-				feedbackPreview := utils.Truncate(
-					string(argsJSON),
-					al.cfg.Agents.Defaults.GetToolFeedbackMaxArgsLength(),
-				)
-				feedbackMsg := utils.FormatToolFeedbackMessage(tc.Name, feedbackPreview)
-				fbCtx, fbCancel := context.WithTimeout(turnCtx, 3*time.Second)
-				_ = al.bus.PublishOutbound(fbCtx, bus.OutboundMessage{
-					Channel: ts.channel,
-					ChatID:  ts.chatID,
-					Content: feedbackMsg,
-				})
-				fbCancel()
-			}
-
-			toolCallID := tc.ID
-			toolIteration := iteration
-			asyncToolName := toolName
-			asyncCallback := func(_ context.Context, result *tools.ToolResult) {
-				// Send ForUser content directly to the user (immediate feedback),
-				// mirroring the synchronous tool execution path.
-				if !result.Silent && result.ForUser != "" {
-					outCtx, outCancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer outCancel()
-					_ = al.bus.PublishOutbound(outCtx, bus.OutboundMessage{
-						Channel: ts.channel,
-						ChatID:  ts.chatID,
-						Content: result.ForUser,
-					})
-				}
-
-				// Determine content for the agent loop (ForLLM or error).
-				content := result.ContentForLLM()
-				if content == "" {
-					return
-				}
-
-				// Filter sensitive data before publishing
-				content = al.cfg.FilterSensitiveData(content)
-
-				logger.InfoCF("agent", "Async tool completed, publishing result",
-					map[string]any{
-						"tool":        asyncToolName,
-						"content_len": len(content),
-						"channel":     ts.channel,
-					})
-				al.emitEvent(
-					EventKindFollowUpQueued,
-					ts.scope.meta(toolIteration, "runTurn", "turn.follow_up.queued"),
-					FollowUpQueuedPayload{
-						SourceTool: asyncToolName,
-						Channel:    ts.channel,
-						ChatID:     ts.chatID,
-						ContentLen: len(content),
-					},
-				)
-
-				pubCtx, pubCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer pubCancel()
-				_ = al.bus.PublishInbound(pubCtx, bus.InboundMessage{
-					Channel:  "system",
-					SenderID: fmt.Sprintf("async:%s", asyncToolName),
-					ChatID:   fmt.Sprintf("%s:%s", ts.channel, ts.chatID),
-					Content:  content,
-				})
-			}
-
-			toolStart := time.Now()
-			execCtx := tools.WithToolInboundContext(
-				turnCtx,
-				ts.channel,
-				ts.chatID,
-				ts.opts.MessageID,
-				ts.opts.ReplyToMessageID,
-			)
-			toolResult := ts.agent.Tools.ExecuteWithContext(
-				execCtx,
-				toolName,
-				toolArgs,
-				ts.channel,
-				ts.chatID,
-				asyncCallback,
-			)
-			toolDuration := time.Since(toolStart)
-
-			if ts.hardAbortRequested() {
+			if before.hardAbort {
 				turnStatus = TurnEndStatusAborted
 				return al.abortTurn(ts)
 			}
+			toolName = before.toolName
+			toolArgs = before.toolArgs
 
-			if al.hooks != nil {
-				toolResp, decision := al.hooks.AfterTool(turnCtx, &ToolResultHookResponse{
-					Meta:      ts.eventMeta("runTurn", "turn.tool.after"),
-					Tool:      toolName,
-					Arguments: toolArgs,
-					Result:    toolResult,
-					Duration:  toolDuration,
-					Channel:   ts.channel,
-					ChatID:    ts.chatID,
-				})
-				switch decision.normalizedAction() {
-				case HookActionContinue, HookActionModify:
-					if toolResp != nil {
-						if toolResp.Tool != "" {
-							toolName = toolResp.Tool
-						}
-						if toolResp.Result != nil {
-							toolResult = toolResp.Result
-						}
-					}
-				case HookActionAbortTurn:
-					turnStatus = TurnEndStatusError
-					return turnResult{}, al.hookAbortError(ts, "after_tool", decision)
-				case HookActionHardAbort:
-					_ = ts.requestHardAbort()
+			var finalized finalizedToolExecution
+			if before.hookResult != nil {
+				// SECURITY: This bypasses ApproveTool, allowing hooks to respond
+				// for any tool name without approval. This is intentional for
+				// plugin tools but means a before_tool hook can override even
+				// sensitive tools like bash. Hook configuration should be
+				// carefully reviewed to prevent unauthorized tool execution.
+				al.emitToolExecutionStart(turnCtx, ts, "runTurn", "Tool call (hook respond)", toolName, toolName, toolArgs)
+				finalized = al.finalizeToolExecution(turnCtx, ts, "runTurn", tc.ID, toolName, before.hookResult, 0)
+			} else {
+				if before.denyContent != "" {
+					allResponsesHandled = false
+					deniedMsg := al.persistToolSkipped(turnCtx, ts, "runTurn", tc.ID, toolName, before.denyContent, false)
+					messages = append(messages, deniedMsg)
+					continue
+				}
+
+				if denyContent := al.approveToolExecution(turnCtx, ts, "runTurn", toolName, toolArgs); denyContent != "" {
+					allResponsesHandled = false
+					deniedMsg := al.persistToolSkipped(turnCtx, ts, "runTurn", tc.ID, toolName, denyContent, false)
+					messages = append(messages, deniedMsg)
+					continue
+				}
+
+				al.emitToolExecutionStart(turnCtx, ts, "runTurn", "Tool call", toolName, tc.Name, toolArgs)
+				toolResult, toolDuration := al.executeAgentTool(
+					turnCtx,
+					ts,
+					toolName,
+					toolArgs,
+					al.newAsyncToolFollowUpCallback(ts, "runTurn", iteration, toolName, true),
+				)
+
+				if ts.hardAbortRequested() {
 					turnStatus = TurnEndStatusAborted
 					return al.abortTurn(ts)
 				}
-			}
 
-			if toolResult == nil {
-				toolResult = tools.ErrorResult("hook returned nil tool result")
-			}
-
-			// Send ForUser if not silent and has content.
-			// For ResponseHandled tools, send regardless of SendResponse setting,
-			// since they've already handled the response (e.g., send_tts, send_file).
-			shouldSendForUser := !toolResult.Silent && toolResult.ForUser != "" &&
-				(ts.opts.SendResponse || toolResult.ResponseHandled)
-			if shouldSendForUser {
-				al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-					Channel: ts.channel,
-					ChatID:  ts.chatID,
-					Content: toolResult.ForUser,
-					Metadata: map[string]string{
-						"is_tool_call": "true",
-					},
-				})
-				logger.DebugCF("agent", "Sent tool result to user",
-					map[string]any{
-						"tool":        toolName,
-						"content_len": len(toolResult.ForUser),
-					})
-			}
-
-			if len(toolResult.Media) > 0 && toolResult.ResponseHandled {
-				parts := make([]bus.MediaPart, 0, len(toolResult.Media))
-				for _, ref := range toolResult.Media {
-					part := bus.MediaPart{Ref: ref}
-					if al.mediaStore != nil {
-						if _, meta, err := al.mediaStore.ResolveWithMeta(ref); err == nil {
-							part.Filename = meta.Filename
-							part.ContentType = meta.ContentType
-							part.Type = inferMediaType(meta.Filename, meta.ContentType)
-						}
-					}
-					parts = append(parts, part)
+				after, err := al.applyAfterToolHooks(
+					turnCtx,
+					ts,
+					"runTurn",
+					toolName,
+					toolArgs,
+					toolResult,
+					toolDuration,
+				)
+				if err != nil {
+					turnStatus = TurnEndStatusError
+					return turnResult{}, err
 				}
-				outboundMedia := bus.OutboundMediaMessage{
-					Channel: ts.channel,
-					ChatID:  ts.chatID,
-					Parts:   parts,
+				if after.hardAbort {
+					turnStatus = TurnEndStatusAborted
+					return al.abortTurn(ts)
 				}
-				if al.channelManager != nil && ts.channel != "" && !constants.IsInternalChannel(ts.channel) {
-					if err := al.channelManager.SendMedia(ctx, outboundMedia); err != nil {
-						logger.WarnCF("agent", "Failed to deliver handled tool media",
-							map[string]any{
-								"agent_id": ts.agent.ID,
-								"tool":     toolName,
-								"channel":  ts.channel,
-								"chat_id":  ts.chatID,
-								"error":    err.Error(),
-							})
-						toolResult = tools.ErrorResult(fmt.Sprintf("failed to deliver attachment: %v", err)).WithError(err)
-					}
-				} else if al.bus != nil {
-					al.bus.PublishOutboundMedia(ctx, outboundMedia)
-					// Queuing media is only best-effort; it has not been delivered yet.
-					toolResult.ResponseHandled = false
+
+				toolName = after.toolName
+				toolResult = after.toolResult
+				if toolResult == nil {
+					toolResult = tools.ErrorResult("hook returned nil tool result")
 				}
+
+				finalized = al.finalizeToolExecution(turnCtx, ts, "runTurn", tc.ID, toolName, toolResult, toolDuration)
 			}
 
-			if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
-				// For tools like load_image that produce media refs without sending them
-				// to the user channel (ResponseHandled == false), both Media and ArtifactTags
-				// coexist on the result:
-				//   - Media: carries media:// refs that resolveMediaRefs will base64-encode
-				//     into image_url parts in the next LLM iteration (enabling vision).
-				//   - ArtifactTags: exposes the local file path as a structured [file:…] tag
-				//     in the tool result text, so the LLM knows an artifact was produced.
-				toolResult.ArtifactTags = buildArtifactTags(al.mediaStore, toolResult.Media)
-			}
-
-			if !toolResult.ResponseHandled {
+			if !finalized.toolResult.ResponseHandled {
 				allResponsesHandled = false
 			}
-
-			contentForLLM := toolResult.ContentForLLM()
-
-			// Filter sensitive data (API keys, tokens, secrets) before sending to LLM
-			if al.cfg.Tools.IsFilterSensitiveDataEnabled() {
-				contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
-			}
-
-			toolResultMsg := providers.Message{
-				Role:       "tool",
-				Content:    contentForLLM,
-				ToolCallID: toolCallID,
-			}
-			if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
-				toolResultMsg.Media = append(toolResultMsg.Media, toolResult.Media...)
-			}
-			al.emitEvent(
-				EventKindToolExecEnd,
-				ts.eventMeta("runTurn", "turn.tool.end"),
-				ToolExecEndPayload{
-					Tool:       toolName,
-					Duration:   toolDuration,
-					ForLLMLen:  len(contentForLLM),
-					ForUserLen: len(toolResult.ForUser),
-					IsError:    toolResult.IsError,
-					Async:      toolResult.Async,
-				},
-			)
-			messages = append(messages, toolResultMsg)
-			if !ts.opts.NoHistory {
-				ts.agent.Sessions.AddFullMessage(ts.sessionKey, toolResultMsg)
-				ts.recordPersistedMessage(toolResultMsg)
-				ts.ingestMessage(turnCtx, al, toolResultMsg)
-			}
+			messages = append(messages, finalized.toolMessage)
 
 			if steerMsgs := al.dequeueSteeringMessagesForScope(ts.sessionKey); len(steerMsgs) > 0 {
 				pendingMessages = append(pendingMessages, steerMsgs...)
