@@ -41,6 +41,8 @@ type AgentInstance struct {
 	Subagents                 *config.SubagentsConfig
 	SkillsFilter              []string
 	Candidates                []providers.FallbackCandidate
+	DeepSeekFallback          providers.LLMProvider
+	DeepSeekFallbackModel     string
 
 	// Router is non-nil when model routing is configured and the light model
 	// was successfully resolved. It scores each incoming message and decides
@@ -168,8 +170,8 @@ func NewAgentInstance(
 	}
 
 	var thinkingLevelStr string
-	if mc, err := cfg.GetModelConfig(model); err == nil {
-		thinkingLevelStr = mc.ThinkingLevel
+	if protocol, _ := providers.ExtractProtocol(ensureProtocolModel(model)); protocol == "codex" {
+		thinkingLevelStr = strings.TrimSpace(cfg.Runtime.Codex.DefaultThinking)
 	}
 	thinkingLevel := parseThinkingLevel(thinkingLevelStr)
 
@@ -184,10 +186,12 @@ func NewAgentInstance(
 	}
 
 	// Resolve fallback candidates
-	candidates := resolveModelCandidates(cfg, defaults.Provider, model, fallbacks)
+	defaultProvider := runtimeDefaultProvider("")
+	candidates := resolveModelCandidates(cfg, defaultProvider, model, fallbacks)
 
 	candidateProviders := make(map[string]providers.LLMProvider)
 	populateCandidateProvidersFromNames(cfg, workspace, fallbacks, candidateProviders)
+	deepSeekFallbackProvider, deepSeekFallbackModel := runtimeDeepSeekFallbackProvider(cfg, workspace)
 
 	// Model routing setup: pre-resolve light model candidates at creation time
 	// to avoid repeated model_list lookups on every incoming message.
@@ -195,7 +199,7 @@ func NewAgentInstance(
 	var lightCandidates []providers.FallbackCandidate
 	var lightProvider providers.LLMProvider
 	if rc := defaults.Routing; rc != nil && rc.Enabled && rc.LightModel != "" {
-		resolved := resolveModelCandidates(cfg, defaults.Provider, rc.LightModel, nil)
+		resolved := resolveModelCandidates(cfg, defaultProvider, rc.LightModel, nil)
 		if len(resolved) > 0 {
 			lightModelCfg, err := resolvedModelConfig(cfg, rc.LightModel, workspace)
 			if err != nil {
@@ -242,6 +246,8 @@ func NewAgentInstance(
 		Subagents:                 subagents,
 		SkillsFilter:              skillsFilter,
 		Candidates:                candidates,
+		DeepSeekFallback:          deepSeekFallbackProvider,
+		DeepSeekFallbackModel:     deepSeekFallbackModel,
 		Router:                    router,
 		LightCandidates:           lightCandidates,
 		LightProvider:             lightProvider,
@@ -283,6 +289,33 @@ func populateCandidateProvidersFromNames(
 		}
 		out[key] = p
 	}
+}
+
+func runtimeDeepSeekFallbackProvider(cfg *config.Config, workspace string) (providers.LLMProvider, string) {
+	if cfg == nil {
+		return nil, ""
+	}
+
+	mc, ok := providers.DeepSeekFallbackModelConfig(cfg)
+	if !ok || mc == nil {
+		return nil, ""
+	}
+
+	clone := *mc
+	if clone.Workspace == "" {
+		clone.Workspace = workspace
+	}
+
+	provider, modelID, err := providers.CreateProviderFromConfig(&clone)
+	if err != nil {
+		logger.WarnCF("agent", "runtime deepseek fallback: failed to create provider", map[string]any{
+			"model": clone.Model,
+			"error": err.Error(),
+		})
+		return nil, ""
+	}
+
+	return provider, modelID
 }
 
 // resolveAgentWorkspace determines the workspace directory for an agent.
