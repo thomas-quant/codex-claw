@@ -57,19 +57,31 @@ func (p *CodexAppServerProvider) RunInteractiveTurn(
 		return nil, fmt.Errorf("codex app server runner not configured")
 	}
 
+	inputText := req.BootstrapInput
+	if inputText == "" {
+		inputText = lastUserMessageContent(req.Messages)
+	}
+	if inputText == "" {
+		return nil, fmt.Errorf("interactive turn requires bootstrap input or a user message")
+	}
+
+	control := codexruntime.ControlRequest{
+		ThinkingMode:      req.Control.ThinkingMode,
+		FastEnabled:       req.Control.FastEnabled,
+		FastEnabledSet:    req.Control.FastEnabledSet,
+		LastUserMessageAt: req.Control.LastUserMessageAt,
+		ForceFreshThread:  req.Control.ForceFreshThread,
+	}
+
 	result, err := p.runner.RunTextTurn(ctx, codexruntime.RunRequest{
 		BindingKey: interactiveBindingKey(req),
 		Model:      req.Model,
-		InputText:  lastUserMessageContent(req.Messages),
+		InputText:  inputText,
 		Recovery: codexruntime.RecoveryRequest{
 			AllowServerRestart: req.Recovery.AllowServerRestart,
 			AllowResume:        req.Recovery.AllowResume,
 		},
-		Control: codexruntime.ControlRequest{
-			ThinkingMode:      req.Control.ThinkingMode,
-			FastEnabled:       req.Control.FastEnabled,
-			LastUserMessageAt: req.Control.LastUserMessageAt,
-		},
+		Control:        control,
 		DynamicTools:   mapDynamicTools(req.Tools),
 		HandleToolCall: mapInteractiveToolExecutor(req.ExecuteTool),
 		OnChunk:        req.OnChunk,
@@ -136,12 +148,15 @@ func (p *CodexAppServerProvider) ReadThreadStatus(ctx context.Context, req Inter
 	}
 
 	return InteractiveThreadStatus{
-		ThreadID:      status.ThreadID,
-		Model:         status.Model,
-		Provider:      "codex",
-		ThinkingMode:  status.ThinkingMode,
-		FastEnabled:   status.FastEnabled,
-		RecoveryState: status.Recovery.Mode,
+		ThreadID:          status.ThreadID,
+		Model:             status.Model,
+		Provider:          "codex",
+		ThinkingMode:      status.ThinkingMode,
+		FastEnabled:       status.FastEnabled,
+		RecoveryState:     status.Recovery.Mode,
+		LastUserMessageAt: status.LastUserMessageAt,
+		LastCompactionAt:  status.LastCompactionAt,
+		ForceFreshThread:  status.ForceFreshThread,
 	}, nil
 }
 

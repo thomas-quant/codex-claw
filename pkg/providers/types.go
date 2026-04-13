@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/providers/protocoltypes"
 )
@@ -59,7 +60,9 @@ type InteractiveRecoveryRequest struct {
 type InteractiveControlRequest struct {
 	ThinkingMode      string
 	FastEnabled       bool
+	FastEnabledSet    bool
 	LastUserMessageAt string
+	ForceFreshThread  bool
 }
 
 type InteractiveThreadControlRequest struct {
@@ -78,29 +81,33 @@ type InteractiveModelInfo struct {
 }
 
 type InteractiveThreadStatus struct {
-	ThreadID      string
-	Model         string
-	Provider      string
-	ThinkingMode  string
-	FastEnabled   bool
-	RecoveryState string
+	ThreadID          string
+	Model             string
+	Provider          string
+	ThinkingMode      string
+	FastEnabled       bool
+	RecoveryState     string
+	LastUserMessageAt time.Time
+	LastCompactionAt  time.Time
+	ForceFreshThread  bool
 }
 
 // InteractiveTurnRequest carries the provider-layer state needed to execute
 // a stateful interactive turn without changing the base LLMProvider interface.
 type InteractiveTurnRequest struct {
-	SessionKey  string
-	AgentID     string
-	Channel     string
-	ChatID      string
-	Model       string
-	Messages    []Message
-	Tools       []ToolDefinition
-	Options     map[string]any
-	Recovery    InteractiveRecoveryRequest
-	Control     InteractiveControlRequest
-	OnChunk     func(string)
-	ExecuteTool InteractiveToolExecutor
+	SessionKey     string
+	AgentID        string
+	Channel        string
+	ChatID         string
+	Model          string
+	Messages       []Message
+	Tools          []ToolDefinition
+	Options        map[string]any
+	BootstrapInput string
+	Recovery       InteractiveRecoveryRequest
+	Control        InteractiveControlRequest
+	OnChunk        func(string)
+	ExecuteTool    InteractiveToolExecutor
 }
 
 // InteractiveProvider is an optional capability for providers that manage a

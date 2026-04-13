@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/codexruntime"
 )
@@ -56,7 +57,9 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T)
 		Control: InteractiveControlRequest{
 			ThinkingMode:      "high",
 			FastEnabled:       true,
+			FastEnabledSet:    true,
 			LastUserMessageAt: "2026-04-13T10:00:00Z",
+			ForceFreshThread:  true,
 		},
 		OnChunk: func(chunk string) {
 			chunks = append(chunks, chunk)
@@ -103,8 +106,11 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T)
 	if !runner.gotReq.Recovery.AllowServerRestart || !runner.gotReq.Recovery.AllowResume {
 		t.Fatalf("runner recovery = %#v, want restart+resume enabled", runner.gotReq.Recovery)
 	}
-	if runner.gotReq.Control.ThinkingMode != "high" || !runner.gotReq.Control.FastEnabled || runner.gotReq.Control.LastUserMessageAt != "2026-04-13T10:00:00Z" {
+	if runner.gotReq.Control.ThinkingMode != "high" || !runner.gotReq.Control.FastEnabled || !runner.gotReq.Control.FastEnabledSet || runner.gotReq.Control.LastUserMessageAt != "2026-04-13T10:00:00Z" {
 		t.Fatalf("runner control = %#v, want forwarded control metadata", runner.gotReq.Control)
+	}
+	if !runner.gotReq.Control.ForceFreshThread {
+		t.Fatalf("runner control.force_fresh_thread = %v, want true", runner.gotReq.Control.ForceFreshThread)
 	}
 	if runner.gotReq.OnChunk == nil {
 		t.Fatal("runner on_chunk is nil")
@@ -117,6 +123,88 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T)
 
 	if !slices.Equal(chunks, []string{"chunk-1", "chunk-2"}) {
 		t.Fatalf("streamed chunks = %v, want %v", chunks, []string{"chunk-1", "chunk-2"})
+	}
+}
+
+func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsBootstrapInput(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		result: codexruntime.RunResult{
+			Content:  "assistant reply",
+			ThreadID: "thread-123",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+		Model:      "gpt-5.4",
+		Messages: []Message{
+			{Role: "system", Content: "system"},
+			{Role: "user", Content: "first"},
+			{Role: "assistant", Content: "reply"},
+			{Role: "user", Content: "current"},
+		},
+		BootstrapInput: "SYSTEM\nUSER:first\nASSISTANT:reply\nUSER:current",
+	})
+	if err != nil {
+		t.Fatalf("RunInteractiveTurn() error = %v", err)
+	}
+
+	if runner.gotReq.InputText != "SYSTEM\nUSER:first\nASSISTANT:reply\nUSER:current" {
+		t.Fatalf("RunInteractiveTurn() input_text = %q, want bootstrap payload", runner.gotReq.InputText)
+	}
+}
+
+func TestCodexAppServerProvider_RunInteractiveTurn_PreservesBootstrapInputVerbatim(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		result: codexruntime.RunResult{
+			Content:  "assistant reply",
+			ThreadID: "thread-123",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	bootstrapInput := "  USER:current\n\n"
+	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
+		SessionKey:     "session-1",
+		AgentID:        "agent-7",
+		Model:          "gpt-5.4",
+		BootstrapInput: bootstrapInput,
+	})
+	if err != nil {
+		t.Fatalf("RunInteractiveTurn() error = %v", err)
+	}
+
+	if runner.gotReq.InputText != bootstrapInput {
+		t.Fatalf("RunInteractiveTurn() input_text = %q, want %q", runner.gotReq.InputText, bootstrapInput)
+	}
+}
+
+func TestCodexAppServerProvider_RunInteractiveTurn_ErrorsWithoutBootstrapInputOrUserMessage(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{}
+	provider := NewCodexAppServerProvider(runner)
+
+	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+		Model:      "gpt-5.4",
+		Messages: []Message{
+			{Role: "system", Content: "system"},
+			{Role: "assistant", Content: "assistant"},
+		},
+	})
+	if err == nil {
+		t.Fatal("RunInteractiveTurn() error = nil, want error")
+	}
+	if runner.runTextTurnCalled {
+		t.Fatalf("runner was called with request %#v, want no runner call", runner.gotReq)
 	}
 }
 
@@ -340,6 +428,49 @@ func TestCodexAppServerProvider_RuntimeControlsDelegateToRunner(t *testing.T) {
 	}
 }
 
+func TestCodexAppServerProvider_ReadThreadStatus_ProjectsContinuityFields(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	lastCompactionAt := now.Add(-2 * time.Minute)
+	runner := &fakeCodexAppServerRunner{
+		status: codexruntime.RuntimeStatusSnapshot{
+			ThreadID:          "thr_1",
+			Model:             "gpt-5.4",
+			ThinkingMode:      "high",
+			FastEnabled:       true,
+			LastUserMessageAt: now,
+			LastCompactionAt:  lastCompactionAt,
+			ForceFreshThread:  true,
+			Recovery: codexruntime.RecoveryStatus{
+				Mode: "fresh",
+			},
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	status, err := provider.ReadThreadStatus(context.Background(), InteractiveThreadControlRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+	})
+	if err != nil {
+		t.Fatalf("ReadThreadStatus() error = %v", err)
+	}
+
+	if status.LastUserMessageAt != now {
+		t.Fatalf("ReadThreadStatus() last_user_message_at = %v, want %v", status.LastUserMessageAt, now)
+	}
+	if !status.LastCompactionAt.Equal(lastCompactionAt) {
+		t.Fatalf("ReadThreadStatus() last_compaction_at = %v, want %v", status.LastCompactionAt, lastCompactionAt)
+	}
+	if !status.ForceFreshThread {
+		t.Fatalf("ReadThreadStatus() force_fresh_thread = %v, want true", status.ForceFreshThread)
+	}
+	if runner.readStatusBindingKey != "session-1:agent-7" {
+		t.Fatalf("ReadThreadStatus() binding_key = %q, want %q", runner.readStatusBindingKey, "session-1:agent-7")
+	}
+}
+
 func TestCodexAppServerProvider_RunInteractiveTurn_UsesLastUserMessage(t *testing.T) {
 	t.Parallel()
 
@@ -484,11 +615,13 @@ type fakeCodexAppServerRunner struct {
 	err        error
 	invokeTool codexruntime.ToolCallRequest
 
-	gotReq            codexruntime.RunRequest
-	toolResult        codexruntime.ToolCallResult
-	compactBindingKey string
-	models            []codexruntime.ModelCatalogEntry
-	status            codexruntime.RuntimeStatusSnapshot
+	gotReq                codexruntime.RunRequest
+	runTextTurnCalled     bool
+	toolResult            codexruntime.ToolCallResult
+	compactBindingKey     string
+	models                []codexruntime.ModelCatalogEntry
+	status                codexruntime.RuntimeStatusSnapshot
+	readStatusBindingKey  string
 	setModelBindingKey    string
 	setModelValue         string
 	setModelOldValue      string
@@ -501,6 +634,7 @@ type fakeCodexAppServerRunner struct {
 }
 
 func (f *fakeCodexAppServerRunner) RunTextTurn(_ context.Context, req codexruntime.RunRequest) (codexruntime.RunResult, error) {
+	f.runTextTurnCalled = true
 	f.gotReq = req
 
 	if req.OnChunk != nil {
@@ -527,7 +661,8 @@ func (f *fakeCodexAppServerRunner) ListModels(_ context.Context) ([]codexruntime
 	return append([]codexruntime.ModelCatalogEntry(nil), f.models...), nil
 }
 
-func (f *fakeCodexAppServerRunner) ReadStatus(_ context.Context, _ string) (codexruntime.RuntimeStatusSnapshot, error) {
+func (f *fakeCodexAppServerRunner) ReadStatus(_ context.Context, bindingKey string) (codexruntime.RuntimeStatusSnapshot, error) {
+	f.readStatusBindingKey = bindingKey
 	return f.status, nil
 }
 

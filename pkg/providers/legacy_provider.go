@@ -7,38 +7,61 @@ package providers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/config"
 )
 
-// CreateProvider creates a provider based on the configuration.
-// It uses the model_list configuration (new format) to create providers.
-// The old providers config is automatically converted to model_list during config loading.
-// Returns the provider, the model ID to use, and any error.
+// CreateProvider creates the primary runtime provider.
+// The codex-first runtime uses the Codex app-server only and takes its model
+// from the runtime config instead of legacy model/provider aliases.
 func CreateProvider(cfg *config.Config) (LLMProvider, string, error) {
-	model := cfg.Agents.Defaults.GetModelName()
-
-	// Must have model_list at this point
-	if len(cfg.ModelList) == 0 {
-		return nil, "", fmt.Errorf("no providers configured. Please add entries to model_list in your config")
+	if cfg == nil {
+		return nil, "", fmt.Errorf("config is nil")
 	}
 
-	// Get model config from model_list
-	modelCfg, err := cfg.GetModelConfig(model)
-	if err != nil {
-		return nil, "", fmt.Errorf("model %q not found in model_list: %w", model, err)
+	model := strings.TrimSpace(cfg.Agents.Defaults.GetModelName())
+	if model == "" {
+		model = explicitAgentModel(cfg)
+	}
+	if model == "" {
+		model = strings.TrimSpace(cfg.Runtime.Codex.DefaultModel)
+	}
+	if model == "" {
+		return nil, "", fmt.Errorf("runtime.codex.default_model is required")
 	}
 
-	// Inject global workspace if not set in model config
-	if modelCfg.Workspace == "" {
-		modelCfg.Workspace = cfg.WorkspacePath()
+	workspace := cfg.WorkspacePath()
+	if workspace == "" {
+		workspace = "."
 	}
 
-	// Use factory to create provider
-	provider, modelID, err := CreateProviderFromConfig(modelCfg)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create provider for model %q: %w", model, err)
+	return NewCodexAppServerProvider(newCodexAppServerRunner(workspace, 0)), model, nil
+}
+
+func explicitAgentModel(cfg *config.Config) string {
+	if cfg == nil || len(cfg.Agents.List) == 0 {
+		return ""
 	}
 
-	return provider, modelID, nil
+	for i := range cfg.Agents.List {
+		agent := &cfg.Agents.List[i]
+		if !agent.Default {
+			continue
+		}
+		if agent.Model != nil {
+			if model := strings.TrimSpace(agent.Model.Primary); model != "" {
+				return model
+			}
+		}
+	}
+
+	if len(cfg.Agents.List) == 1 {
+		agent := &cfg.Agents.List[0]
+		if agent.Model != nil {
+			return strings.TrimSpace(agent.Model.Primary)
+		}
+	}
+
+	return ""
 }
