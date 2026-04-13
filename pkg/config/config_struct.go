@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -297,6 +298,31 @@ func (v *SecureModelList) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&mm); err != nil {
 		logger.Errorf("Decode error: %v", err)
 		return err
+	}
+	if len(*v) == 0 {
+		keys := make([]string, 0, len(mm))
+		for name := range mm {
+			keys = append(keys, name)
+		}
+		sort.Strings(keys)
+		models := make([]*ModelConfig, 0, len(keys))
+		for _, name := range keys {
+			m := mm[name]
+			if m == nil {
+				continue
+			}
+			if m.ModelName == "" {
+				base, _, found := strings.Cut(name, ":")
+				if found {
+					m.ModelName = base
+				} else {
+					m.ModelName = name
+				}
+			}
+			models = append(models, m)
+		}
+		*v = models
+		return nil
 	}
 	nameList := toNameIndex(*v)
 	for i, m := range *v {

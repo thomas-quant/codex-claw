@@ -74,7 +74,8 @@ func TestLoadConfig_RejectsLegacyProviderKeys(t *testing.T) {
     "defaults": {
       "workspace": "~/.picoclaw/workspace",
       "provider": "deepseek",
-      "model_name": "deepseek-chat"
+      "model_name": "deepseek-chat",
+      "model": "deepseek-chat"
     }
   },
   "model_list": [

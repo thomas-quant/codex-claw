@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -56,7 +55,6 @@ type Config struct {
 	Bindings  []AgentBinding  `json:"bindings,omitempty"  yaml:"-"`
 	Session   SessionConfig   `json:"session,omitempty"   yaml:"-"`
 	Channels  ChannelsConfig  `json:"channels"            yaml:"channels"`
-	ModelList SecureModelList `json:"model_list"          yaml:"model_list"` // New model-centric provider configuration
 	Gateway   GatewayConfig   `json:"gateway"             yaml:"-"`
 	Hooks     HooksConfig     `json:"hooks,omitempty"     yaml:"-"`
 	Tools     ToolsConfig     `json:"tools"               yaml:",inline"`
@@ -270,9 +268,6 @@ type AgentDefaults struct {
 	Workspace                 string             `json:"workspace"                        env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
 	RestrictToWorkspace       bool               `json:"restrict_to_workspace"            env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
 	AllowReadOutsideWorkspace bool               `json:"allow_read_outside_workspace"     env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
-	Provider                  string             `json:"provider"                         env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	ModelName                 string             `json:"model_name"                       env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
-	ModelFallbacks            []string           `json:"model_fallbacks,omitempty"`
 	ImageModel                string             `json:"image_model,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
 	ImageModelFallbacks       []string           `json:"image_model_fallbacks,omitempty"`
 	MaxTokens                 int                `json:"max_tokens"                       env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
@@ -311,12 +306,6 @@ func (d *AgentDefaults) GetToolFeedbackMaxArgsLength() int {
 // IsToolFeedbackEnabled returns true when tool feedback messages should be sent to the chat.
 func (d *AgentDefaults) IsToolFeedbackEnabled() bool {
 	return d.ToolFeedback.Enabled
-}
-
-// GetModelName returns the effective model name for the agent defaults.
-// It prefers the new "model_name" field but falls back to "model" for backward compatibility.
-func (d *AgentDefaults) GetModelName() string {
-	return d.ModelName
 }
 
 type ChannelsConfig struct {
@@ -1047,24 +1036,19 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	secPath := securityPath(path)
-	err = loadSecurityConfig(cfg, secPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to load security config: %w", err)
+	if _, statErr := os.Stat(secPath); statErr == nil {
+		sec := &SecurityConfig{}
+		err = loadSecurityConfig(sec, secPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load security config: %w", err)
+		}
+		cfg.Channels = sec.Channels
+		cfg.Tools = sec.Tools
+	} else if !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("failed to stat security config: %w", statErr)
 	}
 
 	if err = env.Parse(cfg); err != nil {
-		return nil, err
-	}
-
-	if err := rejectLegacyModelProviderConfig(cfg); err != nil {
-		return nil, err
-	}
-
-	// Expand multi-key configs into separate entries for key-level failover
-	cfg.ModelList = expandMultiKeyModels(cfg.ModelList)
-
-	// Validate model_list for uniqueness and required fields
-	if err = cfg.ValidateModelList(); err != nil {
 		return nil, err
 	}
 
@@ -1080,15 +1064,8 @@ func LoadConfig(path string) (*Config, error) {
 func loadConfig(data []byte) (*Config, error) {
 	cfg := DefaultConfig()
 
-	// Pre-scan the JSON to check whether the user provided model_list entries.
-	// If so, clear the default list first so absent values do not inherit from
-	// the template.
-	var tmp Config
-	if err := json.Unmarshal(data, &tmp); err != nil {
+	if err := rejectLegacyConfigData(data); err != nil {
 		return nil, err
-	}
-	if len(tmp.ModelList) > 0 {
-		cfg.ModelList = nil
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {
@@ -1098,11 +1075,21 @@ func loadConfig(data []byte) (*Config, error) {
 	return cfg, nil
 }
 
-func rejectLegacyModelProviderConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
+func rejectLegacyConfigData(data []byte) error {
+	var probe struct {
+		ModelList json.RawMessage `json:"model_list"`
+		Agents    struct {
+			Defaults struct {
+				Provider  json.RawMessage `json:"provider"`
+				ModelName json.RawMessage `json:"model_name"`
+				Model     json.RawMessage `json:"model"`
+			} `json:"defaults"`
+		} `json:"agents"`
 	}
-	if cfg.Agents.Defaults.Provider != "" {
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+	if len(probe.ModelList) > 0 || len(probe.Agents.Defaults.Provider) > 0 || len(probe.Agents.Defaults.ModelName) > 0 || len(probe.Agents.Defaults.Model) > 0 {
 		return fmt.Errorf("legacy model/provider config is no longer supported")
 	}
 	return nil
@@ -1147,32 +1134,24 @@ func SaveConfig(path string, cfg *Config) error {
 	if cfg.Version < CurrentVersion {
 		cfg.Version = CurrentVersion
 	}
-	// Filter out virtual models before serializing to config file
-	nonVirtualModels := make([]*ModelConfig, 0, len(cfg.ModelList))
-	for _, m := range cfg.ModelList {
-		if !m.isVirtual {
-			nonVirtualModels = append(nonVirtualModels, m)
-		}
-	}
-	// Temporarily replace ModelList with filtered version for serialization
-	originalModelList := cfg.ModelList
-	defer func() {
-		// Restore original ModelList after serialization
-		cfg.ModelList = originalModelList
-	}()
-	cfg.ModelList = nonVirtualModels
-
-	if err := saveSecurityConfig(securityPath(path), cfg); err != nil {
-		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
-		return err
-	}
-
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	logger.Infof("saving config to %s", path)
-	return fileutil.WriteFileAtomic(path, data, 0o600)
+	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
+		return err
+	}
+	secPath := securityPath(path)
+	sec := &SecurityConfig{
+		Channels: cfg.Channels,
+		Tools:    cfg.Tools,
+	}
+	if err := saveSecurityConfig(secPath, sec); err != nil {
+		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
+		return err
+	}
+	return nil
 }
 
 func (c *Config) WorkspacePath() string {
@@ -1193,241 +1172,14 @@ func expandHome(path string) string {
 	return path
 }
 
-// GetModelConfig returns the ModelConfig for the given model name.
-// If multiple configs exist with the same model_name, it uses round-robin
-// selection for load balancing. Returns an error if the model is not found.
-func (c *Config) GetModelConfig(modelName string) (*ModelConfig, error) {
-	matches := c.findMatches(modelName)
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("model %q not found in model_list or providers", modelName)
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-
-	// Multiple configs - use round-robin for load balancing
-	idx := (rrCounter.Add(1) - 1) % uint64(len(matches))
-	return matches[idx], nil
-}
-
-// findMatches finds all ModelConfig entries with the given model_name.
-func (c *Config) findMatches(modelName string) []*ModelConfig {
-	var matches []*ModelConfig
-	for i := range c.ModelList {
-		if c.ModelList[i].ModelName == modelName {
-			matches = append(matches, c.ModelList[i])
-		}
-	}
-	return matches
-}
-
-// ValidateModelList validates all ModelConfig entries in the model_list.
-// It checks that each model config is valid.
-// Note: Multiple entries with the same model_name are allowed for load balancing.
-func (c *Config) ValidateModelList() error {
-	for i := range c.ModelList {
-		if err := c.ModelList[i].Validate(); err != nil {
-			return fmt.Errorf("model_list[%d]: %w", i, err)
-		}
-	}
-	return nil
-}
-
 func (c *Config) SecurityCopyFrom(path string) error {
-	return loadSecurityConfig(c, securityPath(path))
-}
-
-// expandMultiKeyModels expands ModelConfig entries with multiple API keys into
-// separate entries for key-level failover. Each key gets its own ModelConfig entry,
-// and the original entry's fallbacks are set up to chain through the expanded entries.
-//
-// Example: {"model_name": "gpt-4", "api_keys": ["k1", "k2", "k3"]}
-// Becomes:
-//   - {"model_name": "gpt-4", "api_keys": ["k1"], "fallbacks": ["gpt-4__key_1", "gpt-4__key_2"]}
-//   - {"model_name": "gpt-4__key_1", "api_keys": {"k2"}}
-//   - {"model_name": "gpt-4__key_2", "api_keys": {"k3"}}
-func expandMultiKeyModels(models []*ModelConfig) []*ModelConfig {
-	var expanded []*ModelConfig
-
-	for _, m := range models {
-		keys := m.APIKeys.Values()
-
-		// Single key or no keys: keep as-is
-		if len(keys) <= 1 {
-			expanded = append(expanded, m)
-			continue
-		}
-
-		// Multiple keys: expand
-		originalName := m.ModelName
-
-		// Create entries for additional keys (key_1, key_2, ...)
-		var fallbackNames []string
-		for i := 1; i < len(keys); i++ {
-			suffix := fmt.Sprintf("__key_%d", i)
-			expandedName := originalName + suffix
-
-			// Create a copy for the additional key
-			additionalEntry := &ModelConfig{
-				ModelName:      expandedName,
-				Model:          m.Model,
-				APIBase:        m.APIBase,
-				APIKeys:        SimpleSecureStrings(keys[i]),
-				Proxy:          m.Proxy,
-				AuthMethod:     m.AuthMethod,
-				ConnectMode:    m.ConnectMode,
-				Workspace:      m.Workspace,
-				RPM:            m.RPM,
-				MaxTokensField: m.MaxTokensField,
-				RequestTimeout: m.RequestTimeout,
-				ThinkingLevel:  m.ThinkingLevel,
-				ExtraBody:      m.ExtraBody,
-				CustomHeaders:  m.CustomHeaders,
-				isVirtual:      true,
-			}
-			expanded = append(expanded, additionalEntry)
-			fallbackNames = append(fallbackNames, expandedName)
-		}
-
-		// Create the primary entry with first key and fallbacks
-		primaryEntry := &ModelConfig{
-			ModelName:      originalName,
-			Model:          m.Model,
-			APIBase:        m.APIBase,
-			Proxy:          m.Proxy,
-			AuthMethod:     m.AuthMethod,
-			ConnectMode:    m.ConnectMode,
-			Workspace:      m.Workspace,
-			RPM:            m.RPM,
-			MaxTokensField: m.MaxTokensField,
-			RequestTimeout: m.RequestTimeout,
-			ThinkingLevel:  m.ThinkingLevel,
-			ExtraBody:      m.ExtraBody,
-			CustomHeaders:  m.CustomHeaders,
-			APIKeys:        SimpleSecureStrings(keys[0]),
-		}
-
-		// Prepend new fallbacks to existing ones
-		if len(fallbackNames) > 0 {
-			primaryEntry.Fallbacks = append(fallbackNames, m.Fallbacks...)
-		} else if len(m.Fallbacks) > 0 {
-			primaryEntry.Fallbacks = m.Fallbacks
-		}
-
-		expanded = append(expanded, primaryEntry)
+	sec := &SecurityConfig{}
+	if err := loadSecurityConfig(sec, securityPath(path)); err != nil {
+		return err
 	}
-
-	return expanded
-}
-
-type agentDefaultsV0 struct {
-	Workspace                 string         `json:"workspace"                       env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
-	RestrictToWorkspace       bool           `json:"restrict_to_workspace"           env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
-	AllowReadOutsideWorkspace bool           `json:"allow_read_outside_workspace"    env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
-	Provider                  string         `json:"provider"                        env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	ModelName                 string         `json:"model_name,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
-	Model                     string         `json:"model"                           env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"` // Deprecated: use model_name instead
-	ModelFallbacks            []string       `json:"model_fallbacks,omitempty"`
-	ImageModel                string         `json:"image_model,omitempty"           env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
-	ImageModelFallbacks       []string       `json:"image_model_fallbacks,omitempty"`
-	MaxTokens                 int            `json:"max_tokens"                      env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
-	Temperature               *float64       `json:"temperature,omitempty"           env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
-	MaxToolIterations         int            `json:"max_tool_iterations"             env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
-	SummarizeMessageThreshold int            `json:"summarize_message_threshold"     env:"PICOCLAW_AGENTS_DEFAULTS_SUMMARIZE_MESSAGE_THRESHOLD"`
-	SummarizeTokenPercent     int            `json:"summarize_token_percent"         env:"PICOCLAW_AGENTS_DEFAULTS_SUMMARIZE_TOKEN_PERCENT"`
-	MaxMediaSize              int            `json:"max_media_size,omitempty"        env:"PICOCLAW_AGENTS_DEFAULTS_MAX_MEDIA_SIZE"`
-	Routing                   *RoutingConfig `json:"routing,omitempty"`
-}
-
-// GetModelName returns the effective model name for the agent defaults.
-// It prefers the new "model_name" field but falls back to "model" for backward compatibility.
-func (d *agentDefaultsV0) GetModelName() string {
-	if d.ModelName != "" {
-		return d.ModelName
-	}
-	return d.Model
-}
-
-type providerConfigV0 struct {
-	APIKey         string `json:"api_key"                   env:"PICOCLAW_PROVIDERS_{{.Name}}_API_KEY"`
-	APIBase        string `json:"api_base"                  env:"PICOCLAW_PROVIDERS_{{.Name}}_API_BASE"`
-	Proxy          string `json:"proxy,omitempty"           env:"PICOCLAW_PROVIDERS_{{.Name}}_PROXY"`
-	RequestTimeout int    `json:"request_timeout,omitempty" env:"PICOCLAW_PROVIDERS_{{.Name}}_REQUEST_TIMEOUT"`
-	AuthMethod     string `json:"auth_method,omitempty"     env:"PICOCLAW_PROVIDERS_{{.Name}}_AUTH_METHOD"`
-	ConnectMode    string `json:"connect_mode,omitempty"    env:"PICOCLAW_PROVIDERS_{{.Name}}_CONNECT_MODE"`
-}
-
-type openAIProviderConfigV0 struct {
-	providerConfigV0
-	WebSearch bool `json:"web_search" env:"PICOCLAW_PROVIDERS_OPENAI_WEB_SEARCH"`
-}
-
-type providersConfigV0 struct {
-	Anthropic     providerConfigV0       `json:"anthropic"`
-	OpenAI        openAIProviderConfigV0 `json:"openai"`
-	LiteLLM       providerConfigV0       `json:"litellm"`
-	OpenRouter    providerConfigV0       `json:"openrouter"`
-	Groq          providerConfigV0       `json:"groq"`
-	Zhipu         providerConfigV0       `json:"zhipu"`
-	VLLM          providerConfigV0       `json:"vllm"`
-	Gemini        providerConfigV0       `json:"gemini"`
-	Nvidia        providerConfigV0       `json:"nvidia"`
-	Ollama        providerConfigV0       `json:"ollama"`
-	Moonshot      providerConfigV0       `json:"moonshot"`
-	ShengSuanYun  providerConfigV0       `json:"shengsuanyun"`
-	DeepSeek      providerConfigV0       `json:"deepseek"`
-	Cerebras      providerConfigV0       `json:"cerebras"`
-	Vivgrid       providerConfigV0       `json:"vivgrid"`
-	VolcEngine    providerConfigV0       `json:"volcengine"`
-	GitHubCopilot providerConfigV0       `json:"github_copilot"`
-	Antigravity   providerConfigV0       `json:"antigravity"`
-	Qwen          providerConfigV0       `json:"qwen"`
-	Mistral       providerConfigV0       `json:"mistral"`
-	Avian         providerConfigV0       `json:"avian"`
-	Minimax       providerConfigV0       `json:"minimax"`
-	LongCat       providerConfigV0       `json:"longcat"`
-	ModelScope    providerConfigV0       `json:"modelscope"`
-	Novita        providerConfigV0       `json:"novita"`
-}
-
-// IsEmpty checks if all provider configs are empty (no API keys or API bases set)
-// Note: WebSearch is an optimization option and doesn't count as "non-empty"
-func (p providersConfigV0) IsEmpty() bool {
-	return p.Anthropic.APIKey == "" && p.Anthropic.APIBase == "" &&
-		p.OpenAI.APIKey == "" && p.OpenAI.APIBase == "" &&
-		p.LiteLLM.APIKey == "" && p.LiteLLM.APIBase == "" &&
-		p.OpenRouter.APIKey == "" && p.OpenRouter.APIBase == "" &&
-		p.Groq.APIKey == "" && p.Groq.APIBase == "" &&
-		p.Zhipu.APIKey == "" && p.Zhipu.APIBase == "" &&
-		p.VLLM.APIKey == "" && p.VLLM.APIBase == "" &&
-		p.Gemini.APIKey == "" && p.Gemini.APIBase == "" &&
-		p.Nvidia.APIKey == "" && p.Nvidia.APIBase == "" &&
-		p.Ollama.APIKey == "" && p.Ollama.APIBase == "" &&
-		p.Moonshot.APIKey == "" && p.Moonshot.APIBase == "" &&
-		p.ShengSuanYun.APIKey == "" && p.ShengSuanYun.APIBase == "" &&
-		p.DeepSeek.APIKey == "" && p.DeepSeek.APIBase == "" &&
-		p.Cerebras.APIKey == "" && p.Cerebras.APIBase == "" &&
-		p.Vivgrid.APIKey == "" && p.Vivgrid.APIBase == "" &&
-		p.VolcEngine.APIKey == "" && p.VolcEngine.APIBase == "" &&
-		p.GitHubCopilot.APIKey == "" && p.GitHubCopilot.APIBase == "" &&
-		p.Antigravity.APIKey == "" && p.Antigravity.APIBase == "" &&
-		p.Qwen.APIKey == "" && p.Qwen.APIBase == "" &&
-		p.Mistral.APIKey == "" && p.Mistral.APIBase == "" &&
-		p.Avian.APIKey == "" && p.Avian.APIBase == "" &&
-		p.Minimax.APIKey == "" && p.Minimax.APIBase == "" &&
-		p.LongCat.APIKey == "" && p.LongCat.APIBase == "" &&
-		p.ModelScope.APIKey == "" && p.ModelScope.APIBase == "" &&
-		p.Novita.APIKey == "" && p.Novita.APIBase == ""
-}
-
-// MarshalJSON implements custom JSON marshaling for providersConfig
-// to omit the entire section when empty
-func (p providersConfigV0) MarshalJSON() ([]byte, error) {
-	if p.IsEmpty() {
-		return []byte("null"), nil
-	}
-	type Alias providersConfigV0
-	return json.Marshal((*Alias)(&p))
+	c.Channels = sec.Channels
+	c.Tools = sec.Tools
+	return nil
 }
 
 func (t *ToolsConfig) IsToolEnabled(name string) bool {
