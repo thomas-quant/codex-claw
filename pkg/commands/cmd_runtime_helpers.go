@@ -51,7 +51,7 @@ func runtimeReadStatus(rt *Runtime) (StatusSnapshot, bool) {
 	if rt == nil || rt.ReadStatus == nil {
 		return StatusSnapshot{}, false
 	}
-	return rt.ReadStatus(), true
+	return rt.ReadStatus()
 }
 
 func runtimeListModels(rt *Runtime) ([]ModelInfo, bool) {
@@ -59,19 +59,6 @@ func runtimeListModels(rt *Runtime) ([]ModelInfo, bool) {
 		return nil, false
 	}
 	return rt.ListModels(), true
-}
-
-func runtimeCurrentModel(rt *Runtime) (name, provider string, ok bool) {
-	if status, found := runtimeReadStatus(rt); found && status.Model != "" {
-		return status.Model, status.Provider, true
-	}
-	if rt != nil && rt.GetModelInfo != nil {
-		name, provider = rt.GetModelInfo()
-		if name != "" || provider != "" {
-			return name, provider, true
-		}
-	}
-	return "", "", false
 }
 
 func formatModelList(models []ModelInfo) string {

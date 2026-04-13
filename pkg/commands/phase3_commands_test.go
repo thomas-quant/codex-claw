@@ -143,7 +143,7 @@ func TestStatus_UsesRuntimeSnapshot(t *testing.T) {
 	lastUserMessageAt := time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC)
 	lastCompactionAt := time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC)
 	rt := &Runtime{
-		ReadStatus: func() StatusSnapshot {
+		ReadStatus: func() (StatusSnapshot, bool) {
 			return StatusSnapshot{
 				ThreadID:          "thread-123",
 				Model:             "gpt-5.4",
@@ -153,7 +153,7 @@ func TestStatus_UsesRuntimeSnapshot(t *testing.T) {
 				LastCompactionAt:  lastCompactionAt,
 				ForceFreshThread:  true,
 				RecoveryState:     "resumed after restart",
-			}
+			}, true
 		},
 	}
 	ex := NewExecutor(NewRegistry(BuiltinDefinitions()), rt)
@@ -178,6 +178,27 @@ func TestStatus_UsesRuntimeSnapshot(t *testing.T) {
 	}, "\n")
 	if *reply != want {
 		t.Fatalf("reply=%q, want %q", *reply, want)
+	}
+}
+
+func TestStatus_ReturnsUnavailableWhenRuntimeStatusLookupFails(t *testing.T) {
+	rt := &Runtime{
+		ReadStatus: func() (StatusSnapshot, bool) {
+			return StatusSnapshot{}, false
+		},
+	}
+	ex := NewExecutor(NewRegistry(BuiltinDefinitions()), rt)
+
+	replyFn, reply := mustReply(t)
+	res := ex.Execute(context.Background(), Request{
+		Text:  "/status",
+		Reply: replyFn,
+	})
+	if res.Outcome != OutcomeHandled {
+		t.Fatalf("outcome=%v, want=%v", res.Outcome, OutcomeHandled)
+	}
+	if *reply != unavailableMsg {
+		t.Fatalf("reply=%q, want %q", *reply, unavailableMsg)
 	}
 }
 
@@ -275,8 +296,8 @@ func TestListModels_UsesRuntimeCatalog(t *testing.T) {
 
 func TestShowModel_UsesRuntimeStatus(t *testing.T) {
 	rt := &Runtime{
-		ReadStatus: func() StatusSnapshot {
-			return StatusSnapshot{Model: "gpt-5.4", Provider: "codex"}
+		ReadStatus: func() (StatusSnapshot, bool) {
+			return StatusSnapshot{Model: "gpt-5.4", Provider: "codex"}, true
 		},
 	}
 	ex := NewExecutor(NewRegistry(BuiltinDefinitions()), rt)

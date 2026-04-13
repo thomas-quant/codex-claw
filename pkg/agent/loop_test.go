@@ -1181,7 +1181,10 @@ func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *test
 		t.Fatalf("ListModels() = %#v, want codex models", models)
 	}
 
-	status := rt.ReadStatus()
+	status, ok := rt.ReadStatus()
+	if !ok {
+		t.Fatal("ReadStatus() returned unavailable status")
+	}
 	if status.ThreadID != "thr_123" || status.Model != "gpt-5.4" || status.ThinkingMode != "medium" {
 		t.Fatalf("ReadStatus() = %#v, want thread/model/thinking state", status)
 	}

@@ -34,7 +34,7 @@ type Runtime struct {
 	Config             *config.Config
 	GetModelInfo       func() (name, provider string)
 	ListModels         func() []ModelInfo
-	ReadStatus         func() StatusSnapshot
+	ReadStatus         func() (StatusSnapshot, bool)
 	ListAgentIDs       func() []string
 	ListDefinitions    func() []Definition
 	ListSkillNames     func() []string

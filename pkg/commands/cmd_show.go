@@ -17,7 +17,10 @@ func showCommand() Definition {
 					if rt == nil || rt.ReadStatus == nil {
 						return req.Reply(unavailableMsg)
 					}
-					status := rt.ReadStatus()
+					status, ok := runtimeReadStatus(rt)
+					if !ok {
+						return req.Reply(unavailableMsg)
+					}
 					name := status.Model
 					provider := status.Provider
 					if name == "" {

@@ -3266,7 +3266,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 				}
 				return out
 			}
-			rt.ReadStatus = func() commands.StatusSnapshot {
+			rt.ReadStatus = func() (commands.StatusSnapshot, bool) {
 				ctx, cancel := withRuntimeContext()
 				defer cancel()
 
@@ -3276,7 +3276,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 						"agent_id": agent.ID,
 						"error":    err.Error(),
 					})
-					return commands.StatusSnapshot{}
+					return commands.StatusSnapshot{}, false
 				}
 
 				return commands.StatusSnapshot{
@@ -3289,7 +3289,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 					LastCompactionAt:  status.LastCompactionAt,
 					ForceFreshThread:  status.ForceFreshThread,
 					RecoveryState:     status.RecoveryState,
-				}
+				}, true
 			}
 			rt.SetModel = func(value string) (string, error) {
 				ctx, cancel := withRuntimeContext()
