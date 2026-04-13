@@ -7,7 +7,7 @@
 Use the root `Makefile` first:
 
 - `make build`: build the main `picoclaw` binary.
-- `make test`: run `go generate`, tagged Go tests, and repo verification steps wired into the Makefile.
+- `make test`: run `go generate` and the tagged Go test suite.
 - `make vet`, `make lint`, `make fmt`, `make fix`, `make check`: static analysis, formatting, autofix, and full verification.
 - `make build-all`: build release binaries for the supported target set.
 - `make install` / `make uninstall`: install or remove the CLI from your local prefix.

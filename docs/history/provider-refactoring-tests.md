@@ -66,7 +66,7 @@ pkg/
 | `TestModelRegistry_MixedSingleAndMultiple` | Single/multiple config mix | US-006 |
 | `TestModelRegistry_CaseSensitiveModelNames` | Case sensitivity | US-006 |
 
-### 4. `pkg/providers/factory/factory_test.go` - Provider Factory Tests
+### 4. `pkg/providers/factory_test.go` - Provider Factory Tests
 
 | Test Name | Purpose | PRD Reference |
 |-----------|---------|---------------|

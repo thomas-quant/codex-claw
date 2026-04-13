@@ -73,16 +73,16 @@ Telegram and Discord are the supported chat channels. The generic channel manage
   "channels": {
     "telegram": {
       "enabled": true,
-      "token": "YOUR_TELEGRAM_BOT_TOKEN",
       "allow_from": ["YOUR_USER_ID"]
     },
     "discord": {
-      "enabled": false,
-      "token": "YOUR_DISCORD_BOT_TOKEN"
+      "enabled": false
     }
   }
 }
 ```
+
+Store channel tokens in `.security.yml`, not `config.json`. See [security_configuration.md](security_configuration.md) for the matching secret layout.
 
 ## Workspace Layout
 
