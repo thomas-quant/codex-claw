@@ -32,11 +32,20 @@ import (
 // an appropriately configured net.Dialer.
 var httpClient = &http.Client{Timeout: 2 * time.Minute}
 
+// releaseRepoSlug is the configured GitHub release repository in owner/repo
+// form. It intentionally defaults to empty so builds fail closed until the
+// final codex-claw release repo slug is explicitly wired in.
+var releaseRepoSlug string
+
+const selfUpdateDisabledMessage = "" +
+	"self-update is disabled: no release repository is configured for this build; " +
+	"use --url to specify a release asset, release page, or GitHub API URL"
+
 // DownloadAndExtractRelease downloads a release archive (or uses a direct
 // asset URL) and extracts it to a temporary directory. It returns the
 // extraction directory on success. If releaseURL is empty, the latest
-// release of the current project is used. platform/arch can be used to
-// select the correct asset (e.g. "linux", "amd64").
+// release of the configured project is used. platform/arch can be used
+// to select the correct asset (e.g. "linux", "amd64").
 func DownloadAndExtractRelease(releaseURL, platform, arch string) (string, error) {
 	assetURL, checksum, err := findAssetInfo(releaseURL, platform, arch)
 	if err != nil {
@@ -123,8 +132,8 @@ func DownloadAndExtractRelease(releaseURL, platform, arch string) (string, error
 // UpdateSelfFromRelease downloads the release matching the given parameters,
 // extracts it and applies the binary named programName to update the
 // currently running executable using minio/selfupdate.
-// If releaseURL is empty, the latest release is used. If platform or arch
-// is empty, runtime values are used.
+// If releaseURL is empty, the latest configured release is used. If
+// platform or arch is empty, runtime values are used.
 func UpdateSelfFromRelease(releaseURL, platform, arch, programName string) error {
 	if platform == "" {
 		platform = runtime.GOOS
@@ -171,31 +180,57 @@ func UpdateSelfFromRelease(releaseURL, platform, arch, programName string) error
 // UpdateSelf updates the running executable by fetching the latest release
 // and applying the binary matching programName.
 func UpdateSelf(programName string) error {
-	// By default, select the latest stable release when no explicit
-	// release URL is provided. Use --nightly or a custom URL to override.
+	// By default, use the latest stable release from the configured repo
+	// when no explicit release URL is provided.
 	return UpdateSelfFromRelease("", runtime.GOOS, runtime.GOARCH, programName)
 }
 
-// GetReleaseAPIURL returns the GitHub Releases API URL for the given repo owner.
-// Example: owner="sky5454" -> https://api.github.com/repos/sky5454/picoclaw/releases/latest
-func GetReleaseAPIURL(owner string) string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/picoclaw/releases/latest", owner)
+// GetReleaseAPIURL returns the GitHub Releases API URL for the given repo slug.
+// Example: repoSlug="owner/repo" -> https://api.github.com/repos/owner/repo/releases/latest
+func GetReleaseAPIURL(repoSlug string) string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repoSlug)
 }
 
-// GetProdReleaseAPIURL returns the production release API URL (upstream).
-func GetProdReleaseAPIURL() string {
-	return GetReleaseAPIURL("sipeed")
+// GetProdReleaseAPIURL returns the configured production release API URL.
+func GetProdReleaseAPIURL() (string, error) {
+	repoSlug, err := configuredReleaseRepoSlug()
+	if err != nil {
+		return "", err
+	}
+	return GetReleaseAPIURL(repoSlug), nil
 }
 
 // GetReleaseTagAPIURL returns the GitHub Releases API URL for a specific tag.
-// Example: owner="sipeed", tag="nightly" -> https://api.github.com/repos/sipeed/picoclaw/releases/tags/nightly
-func GetReleaseTagAPIURL(owner, tag string) string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/picoclaw/releases/tags/%s", owner, tag)
+// Example: repoSlug="owner/repo", tag="nightly" -> https://api.github.com/repos/owner/repo/releases/tags/nightly
+func GetReleaseTagAPIURL(repoSlug, tag string) string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repoSlug, tag)
 }
 
-// GetNightlyReleaseAPIURL returns the nightly release API URL for the production repo.
-func GetNightlyReleaseAPIURL() string {
-	return GetReleaseTagAPIURL("sipeed", "nightly")
+// GetNightlyReleaseAPIURL returns the nightly release API URL for the
+// configured production repo.
+func GetNightlyReleaseAPIURL() (string, error) {
+	repoSlug, err := configuredReleaseRepoSlug()
+	if err != nil {
+		return "", err
+	}
+	return GetReleaseTagAPIURL(repoSlug, "nightly"), nil
+}
+
+func configuredReleaseRepoSlug() (string, error) {
+	repoSlug := strings.TrimSpace(releaseRepoSlug)
+	if repoSlug == "" {
+		return "", fmt.Errorf(selfUpdateDisabledMessage)
+	}
+
+	parts := strings.Split(repoSlug, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf(
+			"self-update is disabled: invalid release repository slug %q; expected owner/repo",
+			repoSlug,
+		)
+	}
+
+	return repoSlug, nil
 }
 
 // findAssetURL resolves the appropriate asset URL for the given release
@@ -209,9 +244,13 @@ func findAssetInfo(releaseURL, platform, arch string) (string, string, error) {
 
 	apiURL := buildReleaseAPIURL(releaseURL)
 	if apiURL == "" {
-		// If caller provided an empty releaseURL, default to the
-		// production latest release API URL (stable release).
-		apiURL = GetProdReleaseAPIURL()
+		// If caller provided an empty releaseURL, only use an explicitly
+		// configured production release API URL. Otherwise fail closed.
+		defaultAPIURL, err := GetProdReleaseAPIURL()
+		if err != nil {
+			return "", "", err
+		}
+		apiURL = defaultAPIURL
 	}
 
 	resp, err := httpClient.Get(apiURL)

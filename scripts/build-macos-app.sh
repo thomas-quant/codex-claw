@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build macOS .app bundle for PicoClaw Launcher
+# Build macOS .app bundle for codex-claw
 
 set -e
 
@@ -10,16 +10,15 @@ if [ -z "$EXECUTABLE" ]; then
     exit 1
 fi
 
-LAUNCHER_EXECUTABLE="picoclaw-launcher-${EXECUTABLE}"
-EXECUTABLE="picoclaw-${EXECUTABLE}"
+EXECUTABLE="codex-claw-${EXECUTABLE}"
 echo "executable: $EXECUTABLE"
 
-APP_NAME="PicoClaw Launcher"
+APP_NAME="Codex Claw"
 APP_PATH="./build/${APP_NAME}.app"
 APP_CONTENTS="${APP_PATH}/Contents"
 APP_MACOS="${APP_CONTENTS}/MacOS"
 APP_RESOURCES="${APP_CONTENTS}/Resources"
-APP_EXECUTABLE="picoclaw-launcher"
+APP_EXECUTABLE="codex-claw"
 ICON_SOURCE="./scripts/icon.icns"
 
 # Clean up existing .app
@@ -35,17 +34,10 @@ mkdir -p "$APP_RESOURCES"
 
 # Copy executable
 echo "Copying executable..."
-if [ -f "./build/${LAUNCHER_EXECUTABLE}" ]; then
-    cp "./build/${LAUNCHER_EXECUTABLE}" "${APP_MACOS}/${APP_EXECUTABLE}"
-else
-    echo "Error: ./build/${LAUNCHER_EXECUTABLE} not found. Please build the web backend first."
-    echo "Run: make build-launcher"
-    exit 1
-fi
 if [ -f "./build/${EXECUTABLE}" ]; then
-    cp "./build/${EXECUTABLE}" "${APP_MACOS}/picoclaw"
+    cp "./build/${EXECUTABLE}" "${APP_MACOS}/${APP_EXECUTABLE}"
 else
-    echo "Error: ./build/${EXECUTABLE} not found. Please build the main file first."
+    echo "Error: ./build/${EXECUTABLE} not found. Please build the main binary first."
     echo "Run: make build"
     exit 1
 fi
@@ -59,13 +51,13 @@ cat > "${APP_CONTENTS}/Info.plist" << 'EOF'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>picoclaw-launcher</string>
+    <string>codex-claw</string>
     <key>CFBundleIdentifier</key>
-    <string>com.picoclaw.launcher</string>
+    <string>com.sipeed.codexclaw</string>
     <key>CFBundleName</key>
-    <string>PicoClaw Launcher</string>
+    <string>Codex Claw</string>
     <key>CFBundleDisplayName</key>
-    <string>PicoClaw Launcher</string>
+    <string>Codex Claw</string>
     <key>CFBundleIconFile</key>
     <string>icon.icns</string>
     <key>CFBundlePackageType</key>
@@ -75,10 +67,6 @@ cat > "${APP_CONTENTS}/Info.plist" << 'EOF'
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSSupportsAutomaticGraphicsSwitching</key>
-    <true/>
-    <key>LSUIElement</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>10.11</string>
@@ -93,16 +81,16 @@ EOF
 #    echo "Warning: iconutil failed"
 #}
 
-cp $ICON_SOURCE "${APP_RESOURCES}/icon.icns"
+cp "$ICON_SOURCE" "${APP_RESOURCES}/icon.icns"
 
 echo ""
 echo "=========================================="
 echo "Successfully created: ${APP_PATH}"
 echo "=========================================="
 echo ""
-echo "To launch PicoClaw:"
+echo "To launch Codex Claw:"
 echo "  1. Double-click ${APP_NAME}.app in Finder"
 echo "  2. Or use: open ${APP_PATH}"
 echo ""
-echo "Note: The app will run in the menu bar (systray) without a terminal window."
+echo "Note: The app launches as a standard macOS application bundle."
 echo ""

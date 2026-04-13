@@ -8,6 +8,75 @@ import (
 	"testing"
 )
 
+func TestGetProdReleaseAPIURL_Unconfigured(t *testing.T) {
+	oldSlug := releaseRepoSlug
+	releaseRepoSlug = ""
+	t.Cleanup(func() { releaseRepoSlug = oldSlug })
+
+	got, err := GetProdReleaseAPIURL()
+	if err == nil {
+		t.Fatal("GetProdReleaseAPIURL() error = nil, want error")
+	}
+	if got != "" {
+		t.Fatalf("GetProdReleaseAPIURL() URL = %q, want empty", got)
+	}
+	if !strings.Contains(err.Error(), "self-update is disabled") {
+		t.Fatalf("GetProdReleaseAPIURL() error = %q, want explicit disabled message", err)
+	}
+}
+
+func TestGetProdReleaseAPIURL_Configured(t *testing.T) {
+	oldSlug := releaseRepoSlug
+	releaseRepoSlug = "owner/repo"
+	t.Cleanup(func() { releaseRepoSlug = oldSlug })
+
+	got, err := GetProdReleaseAPIURL()
+	if err != nil {
+		t.Fatalf("GetProdReleaseAPIURL() error = %v", err)
+	}
+	want := "https://api.github.com/repos/owner/repo/releases/latest"
+	if got != want {
+		t.Fatalf("GetProdReleaseAPIURL() = %q, want %q", got, want)
+	}
+}
+
+func TestGetProdReleaseAPIURL_InvalidSlug(t *testing.T) {
+	oldSlug := releaseRepoSlug
+	releaseRepoSlug = "owner/repo/extra"
+	t.Cleanup(func() { releaseRepoSlug = oldSlug })
+
+	got, err := GetProdReleaseAPIURL()
+	if err == nil {
+		t.Fatal("GetProdReleaseAPIURL() error = nil, want error")
+	}
+	if got != "" {
+		t.Fatalf("GetProdReleaseAPIURL() URL = %q, want empty", got)
+	}
+	if !strings.Contains(err.Error(), "invalid release repository slug") {
+		t.Fatalf("GetProdReleaseAPIURL() error = %q, want invalid slug message", err)
+	}
+}
+
+func TestFindAssetInfo_EmptyReleaseURLFailsClosedWhenRepoSlugUnset(t *testing.T) {
+	oldSlug := releaseRepoSlug
+	releaseRepoSlug = ""
+	t.Cleanup(func() { releaseRepoSlug = oldSlug })
+
+	gotURL, checksum, err := findAssetInfo("", "linux", "amd64")
+	if err == nil {
+		t.Fatal("findAssetInfo() error = nil, want error")
+	}
+	if gotURL != "" {
+		t.Fatalf("findAssetInfo() URL = %q, want empty", gotURL)
+	}
+	if checksum != "" {
+		t.Fatalf("findAssetInfo() checksum = %q, want empty", checksum)
+	}
+	if !strings.Contains(err.Error(), "--url") {
+		t.Fatalf("findAssetInfo() error = %q, want --url guidance", err)
+	}
+}
+
 // matchesMagic checks whether the file at path looks like a platform binary
 // by inspecting magic bytes (ELF for linux, MZ for windows).
 func matchesMagic(path, platform string) (bool, error) {
@@ -46,7 +115,10 @@ func TestDownloadAndExtractRelease_RealPlatforms(t *testing.T) {
 		{"windows", "arm64"},
 	}
 
-	apiURL := GetProdReleaseAPIURL()
+	apiURL, err := GetProdReleaseAPIURL()
+	if err != nil {
+		t.Skipf("skipping network tests: %v", err)
+	}
 	for _, c := range combos {
 		t.Run(c.platform+"_"+c.arch, func(t *testing.T) {
 			assetURL, checksum, err := findAssetInfo(apiURL, c.platform, c.arch)

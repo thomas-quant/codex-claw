@@ -127,18 +127,17 @@ Any ARM64 Android phone (2015+) with 1GB+ RAM. Install [Termux](https://github.c
 ## 6. How to Test & Contribute
 
 ```bash
-# 1. Download for your architecture
-wget https://github.com/sipeed/picoclaw/releases/latest/download/codex-claw_Linux_arm64.tar.gz
-tar xzf codex-claw_Linux_arm64.tar.gz
+# 1. Build for the current machine from your local checkout
+make build
 
 # 2. Initialize
-./codex-claw onboard
+./build/codex-claw onboard
 
 # 3. Test
-./codex-claw agent -m "Hello, what board am I running on?"
+./build/codex-claw agent -m "Hello, what board am I running on?"
 ```
 
-Available builds: `linux-amd64`, `linux-arm64`, `linux-arm`, `linux-riscv64`, `linux-loong64`, `linux-mipsle`
+For cross-architecture packaging from a checked-out repo, run `make build-all`.
 
 ### Add Your Hardware
 
