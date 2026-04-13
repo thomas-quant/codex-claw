@@ -10,7 +10,7 @@ Symptoms:
 Checks:
 
 1. Confirm the Codex binary and app-server entrypoint are installed and runnable in the current shell.
-2. Confirm you launched PicoClaw from a shell where Codex is already authenticated.
+2. Confirm you launched codex-claw from a shell where Codex is already authenticated.
 3. Check the process logs for the first startup error instead of retrying blindly.
 
 ## No default model is available
@@ -57,7 +57,7 @@ Checks:
 - the matching token exists in `.security.yml`
 - `allow_from` is correct for the users you expect to talk to the bot
 
-Use `picoclaw gateway` to surface channel startup errors directly.
+Use `codex-claw gateway` to surface channel startup errors directly.
 
 ## MCP tools are missing
 
@@ -69,4 +69,4 @@ Checks:
 - the MCP server command or endpoint is reachable from the current runtime environment
 - if `mcpServers` is omitted, the agent receives no MCP tools by default
 
-The app keeps PicoClaw-managed MCP. Codex-native MCP is intentionally disabled.
+The app keeps codex-claw-managed MCP. Codex-native MCP is intentionally disabled.

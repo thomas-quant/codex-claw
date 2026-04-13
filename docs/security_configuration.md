@@ -54,7 +54,7 @@ skills:
 Start the CLI or gateway after updating secrets:
 
 ```bash
-picoclaw gateway
+codex-claw gateway
 ```
 
 If a required token is missing, the affected channel or tool will fail during startup rather than silently falling back.

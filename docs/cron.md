@@ -1,16 +1,16 @@
 # Scheduled Tasks and Cron Jobs
 
-PicoClaw stores scheduled jobs in the current workspace and can run them either as reminders, full agent turns, or shell commands.
+codex-claw stores scheduled jobs in the current workspace and can run them either as reminders, full agent turns, or shell commands.
 
 ## Schedule Types
 
-PicoClaw currently uses three schedule forms in the cron tool:
+codex-claw currently uses three schedule forms in the cron tool:
 
 - `at_seconds`: one-time job, relative to now. After it runs, the job is removed from the store.
 - `every_seconds`: recurring interval, in seconds.
 - `cron_expr`: recurring cron expression such as `0 9 * * *`.
 
-The CLI command `picoclaw cron add` currently supports recurring jobs only:
+The CLI command `codex-claw cron add` currently supports recurring jobs only:
 
 - `--every <seconds>`
 - `--cron '<expr>'`
@@ -20,8 +20,8 @@ There is no CLI flag for a one-time `at` job today.
 Examples:
 
 ```bash
-picoclaw cron add --name "Daily summary" --message "Summarize today's logs" --cron "0 18 * * *"
-picoclaw cron add --name "Ping" --message "heartbeat" --every 300 --deliver
+codex-claw cron add --name "Daily summary" --message "Summarize today's logs" --cron "0 18 * * *"
+codex-claw cron add --name "Ping" --message "heartbeat" --every 300 --deliver
 ```
 
 ## Execution Modes
@@ -32,21 +32,21 @@ Jobs are stored with a message payload and can execute in three stable user-faci
 
 This is the default for the cron tool.
 
-When the job fires, PicoClaw sends the saved message back through the agent loop as a new agent turn. Use this for scheduled work that may need reasoning, tools, or a generated reply.
+When the job fires, codex-claw sends the saved message back through the agent loop as a new agent turn. Use this for scheduled work that may need reasoning, tools, or a generated reply.
 
 ### `deliver: true`
 
-When the job fires, PicoClaw publishes the saved message directly to the target channel and recipient without agent processing.
+When the job fires, codex-claw publishes the saved message directly to the target channel and recipient without agent processing.
 
-The CLI `picoclaw cron add --deliver` flag uses this mode.
+The CLI `codex-claw cron add --deliver` flag uses this mode.
 
 ### `command`
 
-When a cron-tool job includes `command`, PicoClaw runs that shell command through the `exec` tool and publishes the command output back to the channel.
+When a cron-tool job includes `command`, codex-claw runs that shell command through the `exec` tool and publishes the command output back to the channel.
 
 For command jobs, `deliver` is forced to `false` when the job is created. The saved `message` becomes descriptive text only; the scheduled action is the shell command.
 
-The current CLI `picoclaw cron add` command does not expose a `command` flag.
+The current CLI `codex-claw cron add` command does not expose a `command` flag.
 
 ## Config and Security Gates
 
@@ -73,7 +73,7 @@ If `tools.exec.enabled` is `false`:
 
 `tools.cron.allow_command` defaults to `true`.
 
-This is not a hard disable switch. If you set `allow_command` to `false`, PicoClaw still allows a command job when the caller explicitly passes `command_confirm: true`.
+This is not a hard disable switch. If you set `allow_command` to `false`, codex-claw still allows a command job when the caller explicitly passes `command_confirm: true`.
 
 Command jobs also require an internal channel. Non-command reminders do not have that restriction.
 
@@ -114,10 +114,10 @@ If `PICOCLAW_HOME` is set, the default workspace becomes:
 $PICOCLAW_HOME/workspace
 ```
 
-Both the gateway and `picoclaw cron` CLI subcommands use the same `cron/jobs.json` file.
+Both the gateway and `codex-claw cron` CLI subcommands use the same `cron/jobs.json` file.
 
 Notes:
 
 - one-time `at_seconds` jobs are deleted after they run
 - recurring jobs stay in the store until removed
-- disabled jobs stay in the store and still appear in `picoclaw cron list`
+- disabled jobs stay in the store and still appear in `codex-claw cron list`

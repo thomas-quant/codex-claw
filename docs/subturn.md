@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `SubTurn` mechanism is a core feature in PicoClaw that allows tools to spawn isolated, nested agent loops to handle complex sub-tasks.
+The `SubTurn` mechanism is a core feature in codex-claw that allows tools to spawn isolated, nested agent loops to handle complex sub-tasks.
 
 By using a SubTurn, an agent can break down a problem and run a separate LLM invocation in an independent, ephemeral session. This ensures that intermediate reasoning, background tasks, or sub-agent outputs do not pollute the main conversation history.
 
@@ -131,7 +131,7 @@ All active root turns are registered in `AgentLoop.activeTurnStates` (`sync.Map`
 
 ## Event Bus Integration
 
-SubTurns emit specific events to the PicoClaw `EventBus` for observability and debugging:
+SubTurns emit specific events to the codex-claw `EventBus` for observability and debugging:
 
 | Event Kind | When Emitted | Payload |
 |:------|:-------------|:--------|

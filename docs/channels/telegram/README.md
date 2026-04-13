@@ -1,6 +1,6 @@
 # Telegram
 
-Telegram is one of the two supported chat channels, alongside Discord. It uses the Telegram Bot API with long polling and connects through the shared PicoClaw channel manager.
+Telegram is one of the two supported chat channels, alongside Discord. It uses the Telegram Bot API with long polling and connects through the shared codex-claw channel manager.
 
 ## Configuration
 
@@ -35,12 +35,12 @@ channels:
 ## Behavior
 
 - Supports text messages, media attachments, replies, and command handling.
-- Uses the shared channel allowlist and thread identity rules from PicoClaw.
+- Uses the shared channel allowlist and thread identity rules from codex-claw.
 - Keeps the guide focused on messaging and command handling; voice and other removed provider-era surfaces are out of scope here.
 
 ## Commands
 
-Telegram exposes the same thread-level command surface as the rest of PicoClaw for permitted users, including model and runtime controls such as `/set model`, `/set thinking`, `/fast`, `/compact`, and `/reset`.
+Telegram exposes the same thread-level command surface as the rest of codex-claw for permitted users, including model and runtime controls such as `/set model`, `/set thinking`, `/fast`, `/compact`, and `/reset`.
 
 ## Setup
 

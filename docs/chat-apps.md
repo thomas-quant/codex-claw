@@ -8,7 +8,7 @@ The supported chat surfaces are:
 Both run through the shared channel manager and start with:
 
 ```bash
-picoclaw gateway
+codex-claw gateway
 ```
 
 ## Telegram
@@ -66,4 +66,4 @@ If you only want replies on mention or a custom prefix, configure the Discord tr
 
 - Active operator docs cover Telegram and Discord only.
 - Keep `allow_from` explicit on both Telegram and Discord for personal deployments.
-- Channel startup errors are easiest to diagnose by running `picoclaw gateway` directly in the terminal.
+- Channel startup errors are easiest to diagnose by running `codex-claw gateway` directly in the terminal.

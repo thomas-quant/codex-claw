@@ -1,6 +1,6 @@
 # Discord
 
-Discord is one of the two supported chat channels, alongside Telegram. It connects through the shared PicoClaw channel manager and supports both DMs and server conversations.
+Discord is one of the two supported chat channels, alongside Telegram. It connects through the shared codex-claw channel manager and supports both DMs and server conversations.
 
 ## Configuration
 

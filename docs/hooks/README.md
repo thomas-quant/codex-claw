@@ -159,14 +159,14 @@ Watch it with:
 tail -f /tmp/picoclaw-hook-review-gate.log
 ```
 
-If you are developing PicoClaw itself rather than only validating the protocol, continue with the Go in-process example as well.
+If you are developing codex-claw itself rather than only validating the protocol, continue with the Go in-process example as well.
 
 ## What The Two Examples Are For
 
 - Go in-process example
   Best for validating the host-side hook chain and understanding `MountHook()` plus the synchronous stages
 - Python process example
-  Best for understanding the `JSON-RPC over stdio` protocol and verifying the message flow between PicoClaw and an external process
+  Best for understanding the `JSON-RPC over stdio` protocol and verifying the message flow between codex-claw and an external process
 
 Both examples are intentionally safe: they only log, never rewrite, and never deny.
 
@@ -679,12 +679,12 @@ Additional notes:
 
 Current process hooks use `JSON-RPC over stdio`:
 
-- PicoClaw starts the external process
+- codex-claw starts the external process
 - Requests and responses are exchanged as one JSON message per line
 - `hook.event` is a notification and does not need a response
 - `hook.before_llm`, `hook.after_llm`, `hook.before_tool`, `hook.after_tool`, and `hook.approve_tool` are request/response calls
 
-The host does not currently accept new RPCs initiated by the process hook. In practice, that means an external hook can only respond to PicoClaw calls; it cannot call back into the host to send channel messages.
+The host does not currently accept new RPCs initiated by the process hook. In practice, that means an external hook can only respond to codex-claw calls; it cannot call back into the host to send channel messages.
 
 ## Configuration Fields
 

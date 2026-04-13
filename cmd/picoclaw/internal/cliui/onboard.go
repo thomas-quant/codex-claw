@@ -17,10 +17,10 @@ func PrintOnboardComplete(logo string, encrypt bool, configPath string) {
 }
 
 func printOnboardPlain(logo string, encrypt bool, configPath string) {
-	fmt.Printf("\n%s picoclaw is ready!\n", logo)
+	fmt.Printf("\n%s codex-claw is ready!\n", logo)
 	fmt.Println("\nNext steps:")
 	if encrypt {
-		fmt.Println("  1. Set your encryption passphrase before starting picoclaw:")
+		fmt.Println("  1. Set your encryption passphrase before starting codex-claw:")
 		fmt.Println("       export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS")
 		fmt.Println("       set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd")
 		fmt.Println("")
@@ -36,9 +36,9 @@ func printOnboardPlain(logo string, encrypt bool, configPath string) {
 	fmt.Println("     See `docs/providers.md` for the current runtime options.")
 	fmt.Println("")
 	if encrypt {
-		fmt.Println("  3. Chat: picoclaw agent -m \"Hello!\"")
+		fmt.Println("  3. Chat: codex-claw agent -m \"Hello!\"")
 	} else {
-		fmt.Println("  2. Chat: picoclaw agent -m \"Hello!\"")
+		fmt.Println("  2. Chat: codex-claw agent -m \"Hello!\"")
 	}
 }
 
@@ -46,7 +46,7 @@ func printOnboardFancy(logo string, encrypt bool, configPath string) {
 	inner := InnerWidth()
 	box := borderStyle().MaxWidth(inner + 8)
 
-	ready := titleBarStyle().Render(logo+" picoclaw is ready!") + "\n"
+	ready := titleBarStyle().Render(logo+" codex-claw is ready!") + "\n"
 	fmt.Println()
 	fmt.Println(box.Width(inner).Render(strings.TrimSpace(ready)))
 	fmt.Println()
@@ -82,7 +82,7 @@ func printOnboardFancy(logo string, encrypt bool, configPath string) {
 func buildOnboardingSteps(encrypt bool, configPath string) string {
 	var b strings.Builder
 	if encrypt {
-		b.WriteString("1. Set your encryption passphrase before starting picoclaw:\n")
+		b.WriteString("1. Set your encryption passphrase before starting codex-claw:\n")
 		b.WriteString("   export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS\n")
 		b.WriteString("   set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd\n\n")
 		b.WriteString("2. Review your runtime settings in\n   ")
@@ -104,7 +104,7 @@ func recommendedBlock() string {
 
 func chatStep(encrypt bool) string {
 	if encrypt {
-		return "3. Chat:\n   picoclaw agent -m \"Hello!\""
+		return "3. Chat:\n   codex-claw agent -m \"Hello!\""
 	}
-	return "2. Chat:\n   picoclaw agent -m \"Hello!\""
+	return "2. Chat:\n   codex-claw agent -m \"Hello!\""
 }

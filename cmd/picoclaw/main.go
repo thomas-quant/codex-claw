@@ -1,8 +1,8 @@
-// PicoClaw - Ultra-lightweight personal AI agent
+// codex-claw - Ultra-lightweight personal AI agent
 // Inspired by and based on nanobot: https://github.com/HKUDS/nanobot
 // License: MIT
 //
-// Copyright (c) 2026 PicoClaw contributors
+// Copyright (c) 2026 codex-claw contributors
 
 package main
 
@@ -48,18 +48,18 @@ func earlyColorDisabled() bool {
 }
 
 func NewPicoclawCommand() *cobra.Command {
-	short := fmt.Sprintf("%s PicoClaw — personal AI assistant", internal.Logo)
-	long := fmt.Sprintf(`%s PicoClaw is a lightweight personal AI assistant.
+	short := fmt.Sprintf("%s codex-claw — personal AI assistant", internal.Logo)
+	long := fmt.Sprintf(`%s codex-claw is a lightweight personal AI assistant.
 
 Version: %s`, internal.Logo, config.FormatVersion())
 
 	cmd := &cobra.Command{
-		Use:   "picoclaw",
+		Use:   "codex-claw",
 		Short: short,
 		Long:  long,
-		Example: `picoclaw version
-picoclaw onboard
-picoclaw --no-color status`,
+		Example: `codex-claw version
+codex-claw onboard
+codex-claw --no-color status`,
 		SilenceErrors: true,
 		// Avoid plain UsageString() on stderr/stdout when a command fails; cliui
 		// renders matching panels on stderr instead.
@@ -84,7 +84,7 @@ picoclaw --no-color status`,
 		status.NewStatusCommand(),
 		cron.NewCronCommand(),
 		skills.NewSkillsCommand(),
-		updater.NewUpdateCommand("picoclaw"),
+		updater.NewUpdateCommand("codex-claw"),
 		version.NewVersionCommand(),
 	)
 
