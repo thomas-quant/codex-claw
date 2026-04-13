@@ -20,7 +20,7 @@ import (
 // typos.
 const (
 	// EnvHome overrides the base directory for all picoclaw data
-	// (config, workspace, skills, auth store, …).
+	// (config, workspace, skills, runtime state, …).
 	// Default: ~/.picoclaw
 	EnvHome = "PICOCLAW_HOME"
 
@@ -34,7 +34,7 @@ const (
 	EnvBuiltinSkills = "PICOCLAW_BUILTIN_SKILLS"
 
 	// EnvBinary overrides the path to the picoclaw executable.
-	// Used by the web launcher when spawning the gateway subprocess.
+	// Used by local helper flows that need to re-exec the current binary.
 	// Default: resolved from the same directory as the current executable.
 	EnvBinary = "PICOCLAW_BINARY"
 

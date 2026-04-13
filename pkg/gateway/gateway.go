@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -18,23 +17,8 @@ import (
 	"github.com/sipeed/picoclaw/pkg/audio/tts"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/channels"
-	_ "github.com/sipeed/picoclaw/pkg/channels/dingtalk"
 	_ "github.com/sipeed/picoclaw/pkg/channels/discord"
-	_ "github.com/sipeed/picoclaw/pkg/channels/feishu"
-	_ "github.com/sipeed/picoclaw/pkg/channels/irc"
-	_ "github.com/sipeed/picoclaw/pkg/channels/line"
-	_ "github.com/sipeed/picoclaw/pkg/channels/maixcam"
-	_ "github.com/sipeed/picoclaw/pkg/channels/onebot"
-	"github.com/sipeed/picoclaw/pkg/channels/pico"
-	_ "github.com/sipeed/picoclaw/pkg/channels/qq"
-	_ "github.com/sipeed/picoclaw/pkg/channels/slack"
-	_ "github.com/sipeed/picoclaw/pkg/channels/teams_webhook"
 	_ "github.com/sipeed/picoclaw/pkg/channels/telegram"
-	_ "github.com/sipeed/picoclaw/pkg/channels/vk"
-	_ "github.com/sipeed/picoclaw/pkg/channels/wecom"
-	_ "github.com/sipeed/picoclaw/pkg/channels/weixin"
-	_ "github.com/sipeed/picoclaw/pkg/channels/whatsapp"
-	_ "github.com/sipeed/picoclaw/pkg/channels/whatsapp_native"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/cron"
 	"github.com/sipeed/picoclaw/pkg/devices"
@@ -259,11 +243,6 @@ func Run(debug bool, homePath, configPath string, allowEmptyStartup bool) (runEr
 				runningServices.reloading.Store(false)
 				continue
 			}
-			if err = newCfg.ValidateModelList(); err != nil {
-				logger.Errorf("Config validation failed: %v", err)
-				runningServices.reloading.Store(false)
-				continue
-			}
 			err = executeReload(ctx, agentLoop, newCfg, &provider, runningServices, msgBus, allowEmptyStartup, debug)
 			if err != nil {
 				logger.Errorf("Manual reload failed: %v", err)
@@ -292,8 +271,6 @@ func executeReload(
 	debug bool,
 ) error {
 	defer runningServices.reloading.Store(false)
-
-	overridePicoToken(newCfg, runningServices.authToken)
 
 	return handleConfigReload(ctx, agentLoop, newCfg, provider, runningServices, msgBus, allowEmptyStartup, debug)
 }
@@ -361,8 +338,6 @@ func setupAndStartServices(
 	if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
 		fms.Start()
 	}
-
-	overridePicoToken(cfg, authToken)
 
 	runningServices.ChannelManager, err = channels.NewManager(cfg, msgBus, runningServices.MediaStore)
 	if err != nil {
@@ -677,12 +652,6 @@ func setupConfigWatcherPolling(configPath string, debug bool) (chan *config.Conf
 						continue
 					}
 
-					if err := newCfg.ValidateModelList(); err != nil {
-						logger.Errorf("  ⚠ New config validation failed: %v", err)
-						logger.Warn("  Using previous valid config")
-						continue
-					}
-
 					logger.Info("✓ Config file validated and loaded")
 
 					select {
@@ -752,20 +721,6 @@ func setupCronTool(
 	}
 
 	return cronService, nil
-}
-
-// overridePicoToken replaces the pico channel token with the one from the PID file.
-// The PID file is the single source of truth for the pico auth token;
-// it is generated once at gateway startup and remains unchanged across reloads.
-func overridePicoToken(cfg *config.Config, token string) {
-	if !cfg.Channels.Pico.Enabled {
-		return
-	}
-	picoToken := cfg.Channels.Pico.Token.String()
-	if picoToken == "" || strings.HasPrefix(picoToken, pico.PicoTokenPrefix) {
-		return
-	}
-	cfg.Channels.Pico.SetToken(pico.PicoTokenPrefix + token + picoToken)
 }
 
 func createHeartbeatHandler(agentLoop *agent.AgentLoop) func(prompt, channel, chatID string) *tools.ToolResult {

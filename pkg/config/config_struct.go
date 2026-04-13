@@ -289,39 +289,3 @@ func (s *SecureString) UnmarshalText(text []byte) error {
 	v := string(text)
 	return s.fromRaw(v)
 }
-
-type SecureModelList []*ModelConfig
-
-func (v *SecureModelList) UnmarshalYAML(value *yaml.Node) error {
-	mm := make(map[string]*ModelConfig)
-	if err := value.Decode(&mm); err != nil {
-		logger.Errorf("Decode error: %v", err)
-		return err
-	}
-	nameList := toNameIndex(*v)
-	for i, m := range *v {
-		sec := mm[nameList[i]]
-		if sec == nil {
-			sec = mm[m.ModelName]
-		}
-		if sec != nil {
-			m.APIKeys = sec.APIKeys
-		}
-	}
-	return nil
-}
-
-func (v SecureModelList) MarshalYAML() (any, error) {
-	type onlySecureData struct {
-		APIKeys SecureStrings `yaml:"api_keys,omitempty"`
-	}
-	mm := make(map[string]onlySecureData)
-	nameList := toNameIndex(v)
-	for i, m := range v {
-		mm[nameList[i]] = onlySecureData{
-			APIKeys: m.APIKeys,
-		}
-	}
-
-	return mm, nil
-}
