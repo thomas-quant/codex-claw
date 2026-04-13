@@ -6,7 +6,7 @@
 
 - `channels.telegram.token`
 - `channels.discord.token`
-- tool credentials under `tools.web`, `tools.skills`, and similar `SecureString` fields
+- tool credentials under top-level sections such as `web`, `skills`, and similar `SecureString` fields mirrored from `config.json`
 
 Codex auth is not configured here. Start the Codex runtime in a shell that already has a valid Codex session. DeepSeek fallback credentials also stay out of `config.json`; set `DEEPSEEK_API_KEY` in the process environment.
 
