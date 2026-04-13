@@ -1,7 +1,5 @@
 # 🔄 SubTurn Mechanism
 
-> Back to [README](../README.md)
-
 ## Overview
 
 The `SubTurn` mechanism is a core feature in PicoClaw that allows tools to spawn isolated, nested agent loops to handle complex sub-tasks.

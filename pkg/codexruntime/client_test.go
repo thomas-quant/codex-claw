@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -598,6 +599,104 @@ func TestClient_RunTextTurnRejectsReentrantClientCallsDuringChunkCallback(t *tes
 	}
 }
 
+func TestClient_RunTextTurnRejectsToolCallRequestWithThreadMismatch(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.118.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","id":99,"method":"item/tool/call","params":{"thread_id":"thr_other","turn_id":"turn_123","call_id":"call_1","name":"lookup_weather","arguments":{"city":"London"}}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"thread_id":"thr_123","turn_id":"turn_123"}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if content != "" {
+		t.Fatalf("RunTextTurn() content = %q, want empty", content)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 4 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 4)
+	}
+
+	var response struct {
+		ID    int64          `json:"id"`
+		Error *responseError `json:"error"`
+	}
+	if err := json.Unmarshal(writes[3], &response); err != nil {
+		t.Fatalf("decode mismatch error response: %v", err)
+	}
+	if response.ID != 99 {
+		t.Fatalf("mismatch error response id = %d, want %d", response.ID, 99)
+	}
+	if response.Error == nil || response.Error.Code != -32600 {
+		t.Fatalf("mismatch error response = %#v, want JSON-RPC invalid-request error", response.Error)
+	}
+}
+
+func TestClient_RunTextTurnReturnsDecodeErrorForMalformedNotification(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.118.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","method":"item/agentMessage/delta","params":{"thread_id":123,"turn_id":"turn_123","item_id":"msg_1","delta":"Hello"}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err == nil {
+		t.Fatal("RunTextTurn() error = nil, want decode failure")
+	}
+	if !strings.Contains(err.Error(), "decode item/agentMessage/delta params") {
+		t.Fatalf("RunTextTurn() error = %v, want notification decode error", err)
+	}
+}
+
+func TestClient_RunTextTurnReturnsReadErrorWhenTransportDiesMidTurn(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransportWithReadErr(
+		io.EOF,
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.118.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err == nil {
+		t.Fatal("RunTextTurn() error = nil, want transport read error")
+	}
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("RunTextTurn() error = %v, want EOF", err)
+	}
+}
+
 type scriptedTransport struct {
 	mu      sync.Mutex
 	conn    *scriptedConn
@@ -605,6 +704,10 @@ type scriptedTransport struct {
 }
 
 func newScriptedTransport(responses ...string) *scriptedTransport {
+	return newScriptedTransportWithReadErr(context.DeadlineExceeded, responses...)
+}
+
+func newScriptedTransportWithReadErr(readErr error, responses ...string) *scriptedTransport {
 	items := make([][]byte, 0, len(responses))
 	for _, response := range responses {
 		items = append(items, []byte(response))
@@ -612,7 +715,8 @@ func newScriptedTransport(responses ...string) *scriptedTransport {
 
 	return &scriptedTransport{
 		conn: &scriptedConn{
-			reads: items,
+			reads:   items,
+			readErr: readErr,
 		},
 	}
 }
@@ -640,9 +744,10 @@ func (t *scriptedTransport) Writes() [][]byte {
 }
 
 type scriptedConn struct {
-	mu     sync.Mutex
-	reads  [][]byte
-	writes [][]byte
+	mu      sync.Mutex
+	reads   [][]byte
+	writes  [][]byte
+	readErr error
 }
 
 func (c *scriptedConn) Read(context.Context) ([]byte, error) {
@@ -650,7 +755,10 @@ func (c *scriptedConn) Read(context.Context) ([]byte, error) {
 	defer c.mu.Unlock()
 
 	if len(c.reads) == 0 {
-		return nil, context.DeadlineExceeded
+		if c.readErr == nil {
+			return nil, context.DeadlineExceeded
+		}
+		return nil, c.readErr
 	}
 
 	next := c.reads[0]
