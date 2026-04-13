@@ -1,6 +1,6 @@
 # Chat Apps Configuration
 
-This fork keeps two chat surfaces:
+The supported chat surfaces are:
 
 - [Telegram](channels/telegram/README.md)
 - [Discord](channels/discord/README.md)
@@ -64,6 +64,6 @@ If you only want replies on mention or a custom prefix, configure the Discord tr
 
 ## Notes
 
-- This fork no longer documents or ships Matrix, WhatsApp, Slack, QQ, WeCom, or the other upstream channel integrations.
+- Active operator docs cover Telegram and Discord only.
 - Keep `allow_from` explicit on both Telegram and Discord for personal deployments.
 - Channel startup errors are easiest to diagnose by running `picoclaw gateway` directly in the terminal.

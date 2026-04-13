@@ -13,7 +13,7 @@ Supported environment overrides:
 
 ## Runtime Block
 
-The fork is Codex-first. `runtime.codex` sets the default Codex model and turn behavior:
+The runtime is Codex-first. `runtime.codex` sets the default Codex model and turn behavior:
 
 ```json
 {
@@ -31,7 +31,7 @@ The fork is Codex-first. `runtime.codex` sets the default Codex model and turn b
 
 `runtime.fallback.deepseek` is the only built-in fallback path. It carries the model id and API base only. DeepSeek auth should come from your external secret or env setup, not from `config.json`.
 
-Legacy fallback arrays are no longer part of the runtime contract. The following fields are still parseable for compatibility, but PicoClaw warns and ignores them:
+Legacy fallback arrays are no longer part of the runtime contract. The following fields are still parseable for compatibility, but the runtime warns and ignores them:
 
 - `agents.defaults.model_fallbacks`
 - `agents.defaults.image_model_fallbacks`
@@ -66,7 +66,7 @@ Example:
 
 ## Channels
 
-This fork keeps only Telegram and Discord. The generic channel manager stays, but other channel configs are out of scope.
+Telegram and Discord are the supported chat channels. The generic channel manager stays, but other channel configs are out of scope.
 
 ```json
 {
@@ -96,6 +96,6 @@ The workspace remains the operational center:
 
 ## Bindings and MCP
 
-`bindings`, `tools.mcp`, hooks, cron, memory, and isolation stay first-class. The main change in this fork is the runtime surface, not the agent/tool backbone.
+`bindings`, `tools.mcp`, hooks, cron, memory, and isolation stay first-class. The main change is the runtime surface, not the agent/tool backbone.
 
 Use agent-level `mcpServers` allowlists when you want to grant MCP tools to a specific agent. This allowlist is strict: if `mcpServers` is omitted, that agent receives no MCP tools by default.

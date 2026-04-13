@@ -1,3 +1,5 @@
+> Historical design note: archived for reference only. It describes an earlier provider architecture direction and is not normative for the current product.
+
 # Provider Architecture Refactoring Design
 
 > Issue: #283

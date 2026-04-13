@@ -2,18 +2,18 @@
 
 ## Supported Runtime Paths
 
-This fork actively documents two runtime paths:
+The active runtime surface has two paths:
 
 - `codex`: primary runtime via `codex app-server`
 - `deepseek`: fallback HTTP path
 
-Everything else from the pre-fork provider catalog is out of scope for the active operator docs, even if some shared HTTP/OpenAI-compatible plumbing still exists under the hood.
+Everything else is out of scope for the active operator docs, even if some shared HTTP/OpenAI-compatible plumbing still exists under the hood.
 
-Legacy fallback arrays such as `model_fallbacks`, `image_model_fallbacks`, `model.fallbacks`, and `subagents.model.fallbacks` are deprecated. PicoClaw may still parse them for compatibility, but the runtime ignores them.
+Legacy fallback arrays such as `model_fallbacks`, `image_model_fallbacks`, `model.fallbacks`, and `subagents.model.fallbacks` are deprecated. The app may still parse them for compatibility, but the runtime ignores them.
 
 ## Codex
 
-Codex is the default runtime. Bare model ids are treated as Codex models in the forked runtime, so agent config can stay simple:
+Codex is the default runtime. Bare model ids are treated as Codex models, so agent config can stay simple:
 
 ```yaml
 model: gpt-5.4-mini

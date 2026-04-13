@@ -53,7 +53,7 @@ func printStatusPlain(r StatusReport) {
 			fmt.Printf("%s: %s\n", p.Name, p.Val)
 		}
 		if len(r.OAuthLines) > 0 {
-			fmt.Println("\nOAuth/Token Auth:")
+			fmt.Println("\nCredentials:")
 			for _, line := range r.OAuthLines {
 				fmt.Printf("  %s\n", line)
 			}
@@ -100,7 +100,7 @@ func printStatusFancy(r StatusReport) {
 
 	if len(r.OAuthLines) > 0 && r.ConfigOK {
 		var ob strings.Builder
-		ob.WriteString(titleBarStyle().Render("OAuth / token auth") + "\n\n")
+		ob.WriteString(titleBarStyle().Render("Credentials") + "\n\n")
 		for _, line := range r.OAuthLines {
 			ob.WriteString("  • " + line + "\n")
 		}

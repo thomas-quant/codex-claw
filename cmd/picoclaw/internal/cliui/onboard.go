@@ -24,16 +24,16 @@ func printOnboardPlain(logo string, encrypt bool, configPath string) {
 		fmt.Println("       export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS")
 		fmt.Println("       set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd")
 		fmt.Println("")
-		fmt.Println("  2. Add your API key to", configPath)
+		fmt.Println("  2. Review your runtime settings in", configPath)
 	} else {
-		fmt.Println("  1. Add your API key to", configPath)
+		fmt.Println("  1. Review your runtime settings in", configPath)
 	}
 	fmt.Println("")
 	fmt.Println("     Recommended:")
-	fmt.Println("     - OpenRouter: https://openrouter.ai/keys (access 100+ models)")
-	fmt.Println("     - Ollama:     https://ollama.com (local, free)")
+	fmt.Println("     - Start `codex app-server` from a shell where Codex is already authenticated")
+	fmt.Println("     - If you enable DeepSeek fallback, export `DEEPSEEK_API_KEY` in that shell")
 	fmt.Println("")
-	fmt.Println("     See README.md for 17+ supported providers.")
+	fmt.Println("     See `docs/providers.md` for the current runtime options.")
 	fmt.Println("")
 	if encrypt {
 		fmt.Println("  3. Chat: picoclaw agent -m \"Hello!\"")
@@ -85,11 +85,11 @@ func buildOnboardingSteps(encrypt bool, configPath string) string {
 		b.WriteString("1. Set your encryption passphrase before starting picoclaw:\n")
 		b.WriteString("   export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS\n")
 		b.WriteString("   set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd\n\n")
-		b.WriteString("2. Add your API key to\n   ")
+		b.WriteString("2. Review your runtime settings in\n   ")
 		b.WriteString(configPath)
 		b.WriteString("\n")
 	} else {
-		b.WriteString("1. Add your API key to\n   ")
+		b.WriteString("1. Review your runtime settings in\n   ")
 		b.WriteString(configPath)
 		b.WriteString("\n")
 	}
@@ -97,9 +97,9 @@ func buildOnboardingSteps(encrypt bool, configPath string) string {
 }
 
 func recommendedBlock() string {
-	return "• OpenRouter: https://openrouter.ai/keys\n  (access 100+ models)\n\n" +
-		"• Ollama: https://ollama.com\n  (local, free)\n\n" +
-		"See README.md for 17+ supported providers."
+	return "• Start `codex app-server` from a shell where Codex is already authenticated\n\n" +
+		"• If you enable DeepSeek fallback, export `DEEPSEEK_API_KEY`\n\n" +
+		"See `docs/providers.md` for the current runtime options."
 }
 
 func chatStep(encrypt bool) string {

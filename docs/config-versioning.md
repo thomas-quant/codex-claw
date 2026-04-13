@@ -1,6 +1,6 @@
 # Config Schema Versioning Guide
 
-This fork keeps config versioning, but it is no longer trying to preserve the old provider matrix. The current schema is a deliberate hard break toward a Codex-first runtime.
+Config versioning still matters, but it no longer preserves the removed provider catalog. The current schema is a deliberate hard break toward a Codex-first runtime.
 
 ## Current Direction
 
@@ -36,13 +36,13 @@ Before writing a migrated config, the loader should preserve the previous on-dis
 
 ## When To Add A Migration
 
-Add a real migration only when the fork still intends to preserve that feature surface. Examples:
+Add a real migration only when the product still intends to preserve that feature surface. Examples:
 
 - renaming a surviving channel field
 - restructuring the `runtime` block
 - changing MCP or tool config layout
 
-Do not add migrations for removed provider, auth, or launcher-era config.
+Do not add migrations for removed provider or auth-era config.
 
 ## Troubleshooting
 

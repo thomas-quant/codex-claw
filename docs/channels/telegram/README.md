@@ -1,6 +1,6 @@
 # Telegram
 
-Telegram is one of the two supported chat channels in this fork, alongside Discord. It uses the Telegram Bot API with long polling and connects through the shared PicoClaw channel manager.
+Telegram is one of the two supported chat channels, alongside Discord. It uses the Telegram Bot API with long polling and connects through the shared PicoClaw channel manager.
 
 ## Configuration
 

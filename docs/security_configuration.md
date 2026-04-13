@@ -1,6 +1,6 @@
 # Security Configuration
 
-This fork keeps `.security.yml` for non-model secrets only. Use it for channel tokens and tool credentials that should not live in `config.json`.
+`.security.yml` stores non-model secrets only. Use it for channel tokens and tool credentials that should not live in `config.json`.
 
 ## What Belongs Here
 

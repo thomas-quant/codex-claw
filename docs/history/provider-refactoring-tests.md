@@ -1,3 +1,5 @@
+> Historical design note: archived for reference only. It describes tests for an earlier provider refactoring plan and is not normative for the current product.
+
 # Provider Architecture Refactoring - Test Suite Summary
 
 This document summarizes the complete test suite designed for the Provider architecture refactoring.

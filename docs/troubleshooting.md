@@ -15,7 +15,7 @@ Checks:
 
 ## No default model is available
 
-This fork no longer uses the old model catalog. Runtime defaults live under `runtime.codex`.
+The app no longer uses the old model catalog. Runtime defaults live under `runtime.codex`.
 
 Check:
 
@@ -69,4 +69,4 @@ Checks:
 - the MCP server command or endpoint is reachable from the current runtime environment
 - if `mcpServers` is omitted, the agent receives no MCP tools by default
 
-This fork keeps PicoClaw-managed MCP. Codex-native MCP is intentionally disabled.
+The app keeps PicoClaw-managed MCP. Codex-native MCP is intentionally disabled.
