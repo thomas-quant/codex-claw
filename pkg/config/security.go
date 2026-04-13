@@ -23,11 +23,9 @@ const (
 	SecurityConfigFile = ".security.yml"
 )
 
-// SecurityConfig is the separate on-disk contract for secrets and model credentials.
+// SecurityConfig is the separate on-disk contract for model credentials.
 type SecurityConfig struct {
 	ModelList SecureModelList `yaml:"model_list,omitempty"`
-	Channels  ChannelsConfig  `yaml:"channels,omitempty"`
-	Tools     ToolsConfig     `yaml:",inline"`
 }
 
 // securityPath returns the path to security.yml relative to the config file

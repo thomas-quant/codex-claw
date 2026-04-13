@@ -268,6 +268,7 @@ type AgentDefaults struct {
 	Workspace                 string             `json:"workspace"                        env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
 	RestrictToWorkspace       bool               `json:"restrict_to_workspace"            env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
 	AllowReadOutsideWorkspace bool               `json:"allow_read_outside_workspace"     env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
+	ModelFallbacks            []string           `json:"model_fallbacks,omitempty"`
 	ImageModel                string             `json:"image_model,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
 	ImageModelFallbacks       []string           `json:"image_model_fallbacks,omitempty"`
 	MaxTokens                 int                `json:"max_tokens"                       env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
@@ -1035,19 +1036,6 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	secPath := securityPath(path)
-	if _, statErr := os.Stat(secPath); statErr == nil {
-		sec := &SecurityConfig{}
-		err = loadSecurityConfig(sec, secPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load security config: %w", err)
-		}
-		cfg.Channels = sec.Channels
-		cfg.Tools = sec.Tools
-	} else if !os.IsNotExist(statErr) {
-		return nil, fmt.Errorf("failed to stat security config: %w", statErr)
-	}
-
 	if err = env.Parse(cfg); err != nil {
 		return nil, err
 	}
@@ -1142,15 +1130,6 @@ func SaveConfig(path string, cfg *Config) error {
 	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return err
 	}
-	secPath := securityPath(path)
-	sec := &SecurityConfig{
-		Channels: cfg.Channels,
-		Tools:    cfg.Tools,
-	}
-	if err := saveSecurityConfig(secPath, sec); err != nil {
-		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
-		return err
-	}
 	return nil
 }
 
@@ -1174,12 +1153,7 @@ func expandHome(path string) string {
 
 func (c *Config) SecurityCopyFrom(path string) error {
 	sec := &SecurityConfig{}
-	if err := loadSecurityConfig(sec, securityPath(path)); err != nil {
-		return err
-	}
-	c.Channels = sec.Channels
-	c.Tools = sec.Tools
-	return nil
+	return loadSecurityConfig(sec, securityPath(path))
 }
 
 func (t *ToolsConfig) IsToolEnabled(name string) bool {
