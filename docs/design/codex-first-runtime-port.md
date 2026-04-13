@@ -4,10 +4,10 @@ Status: Draft
 
 Related documents:
 
-- [Codex App-Server Harness Spec](/root/picoclaw/codex-app-server-harness-spec.md)
-- [codex-app-serv.md](/root/picoclaw/codex-app-serv.md)
-- [codex-app-serv.part-01.md](/root/picoclaw/codex-app-serv.part-01.md)
-- [codex-app-serv.part-05.md](/root/picoclaw/codex-app-serv.part-05.md)
+- [Codex App-Server Harness Spec](/root/picoclaw/reference/codex-app-server/harness-spec.md)
+- [codex-app-serv.md](/root/picoclaw/reference/codex-app-server/official-summary.md)
+- [codex-app-serv.part-01.md](/root/picoclaw/reference/codex-app-server/official-summary.part-01.md)
+- [codex-app-serv.part-05.md](/root/picoclaw/reference/codex-app-server/official-summary.part-05.md)
 
 ## 1. Purpose
 

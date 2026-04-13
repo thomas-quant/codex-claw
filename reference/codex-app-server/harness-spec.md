@@ -16,10 +16,10 @@ It provides three plugin surfaces:
 
 Primary entrypoints:
 
-- [index.ts](./index.ts)
-- [harness.ts](./harness.ts)
-- [provider.ts](./provider.ts)
-- [src/commands.ts](./src/commands.ts)
+- [index.ts](../openclaw/codex/index.ts)
+- [harness.ts](../openclaw/codex/harness.ts)
+- [provider.ts](../openclaw/codex/provider.ts)
+- [src/commands.ts](../openclaw/codex/src/commands.ts)
 
 ## Plugin Surface
 
@@ -35,7 +35,7 @@ The harness only claims support for configured provider ids and rejects other pr
 
 ## Configuration
 
-Configuration is declared in [openclaw.plugin.json](./openclaw.plugin.json) and normalized in [src/app-server/config.ts](./src/app-server/config.ts).
+Configuration is declared in [openclaw.plugin.json](../openclaw/codex/openclaw.plugin.json) and normalized in [src/app-server/config.ts](../openclaw/codex/src/app-server/config.ts).
 
 Supported top-level sections:
 
@@ -87,11 +87,11 @@ At a high level the package is composed of five layers:
 
 Important modules:
 
-- [src/app-server/client.ts](./src/app-server/client.ts)
-- [src/app-server/shared-client.ts](./src/app-server/shared-client.ts)
-- [src/app-server/thread-lifecycle.ts](./src/app-server/thread-lifecycle.ts)
-- [src/app-server/run-attempt.ts](./src/app-server/run-attempt.ts)
-- [src/app-server/event-projector.ts](./src/app-server/event-projector.ts)
+- [src/app-server/client.ts](../openclaw/codex/src/app-server/client.ts)
+- [src/app-server/shared-client.ts](../openclaw/codex/src/app-server/shared-client.ts)
+- [src/app-server/thread-lifecycle.ts](../openclaw/codex/src/app-server/thread-lifecycle.ts)
+- [src/app-server/run-attempt.ts](../openclaw/codex/src/app-server/run-attempt.ts)
+- [src/app-server/event-projector.ts](../openclaw/codex/src/app-server/event-projector.ts)
 
 ## Provider and Model Catalog
 
@@ -114,8 +114,8 @@ Dynamic model resolution accepts arbitrary non-empty Codex model ids and synthes
 
 Discovery entrypoints:
 
-- [provider.ts](./provider.ts)
-- [src/app-server/models.ts](./src/app-server/models.ts)
+- [provider.ts](../openclaw/codex/provider.ts)
+- [src/app-server/models.ts](../openclaw/codex/src/app-server/models.ts)
 
 ## Transport and Client Protocol
 
@@ -148,10 +148,10 @@ Client requirements:
 
 Relevant modules:
 
-- [src/app-server/transport.ts](./src/app-server/transport.ts)
-- [src/app-server/transport-stdio.ts](./src/app-server/transport-stdio.ts)
-- [src/app-server/transport-websocket.ts](./src/app-server/transport-websocket.ts)
-- [src/app-server/client.ts](./src/app-server/client.ts)
+- [src/app-server/transport.ts](../openclaw/codex/src/app-server/transport.ts)
+- [src/app-server/transport-stdio.ts](../openclaw/codex/src/app-server/transport-stdio.ts)
+- [src/app-server/transport-websocket.ts](../openclaw/codex/src/app-server/transport-websocket.ts)
+- [src/app-server/client.ts](../openclaw/codex/src/app-server/client.ts)
 
 ## Shared Client Semantics
 
@@ -168,7 +168,7 @@ Live model discovery explicitly tears down the shared client after each discover
 
 Primary module:
 
-- [src/app-server/shared-client.ts](./src/app-server/shared-client.ts)
+- [src/app-server/shared-client.ts](../openclaw/codex/src/app-server/shared-client.ts)
 
 ## Session and Thread State
 
@@ -195,7 +195,7 @@ The binding file is the local cache of which Codex thread belongs to which OpenC
 
 Primary module:
 
-- [src/app-server/session-binding.ts](./src/app-server/session-binding.ts)
+- [src/app-server/session-binding.ts](../openclaw/codex/src/app-server/session-binding.ts)
 
 ## Thread Lifecycle
 
@@ -215,11 +215,11 @@ Both resume and fresh start preserve extended history.
 
 Primary module:
 
-- [src/app-server/thread-lifecycle.ts](./src/app-server/thread-lifecycle.ts)
+- [src/app-server/thread-lifecycle.ts](../openclaw/codex/src/app-server/thread-lifecycle.ts)
 
 ## Attempt Execution Pipeline
 
-The harness execution path is [src/app-server/run-attempt.ts](./src/app-server/run-attempt.ts).
+The harness execution path is [src/app-server/run-attempt.ts](../openclaw/codex/src/app-server/run-attempt.ts).
 
 Per-attempt flow:
 
@@ -249,7 +249,7 @@ Aborting a run sends `turn/interrupt` for the active thread and turn.
 
 The app-server is treated as the canonical source of turn state.
 
-Notifications are projected into OpenClaw result state by [src/app-server/event-projector.ts](./src/app-server/event-projector.ts).
+Notifications are projected into OpenClaw result state by [src/app-server/event-projector.ts](../openclaw/codex/src/app-server/event-projector.ts).
 
 Projection rules:
 
@@ -285,7 +285,7 @@ Tool behavior:
 
 Primary module:
 
-- [src/app-server/dynamic-tools.ts](./src/app-server/dynamic-tools.ts)
+- [src/app-server/dynamic-tools.ts](../openclaw/codex/src/app-server/dynamic-tools.ts)
 
 ## Approval Flow
 
@@ -308,7 +308,7 @@ Approval request families handled explicitly include:
 
 Primary module:
 
-- [src/app-server/approval-bridge.ts](./src/app-server/approval-bridge.ts)
+- [src/app-server/approval-bridge.ts](../openclaw/codex/src/app-server/approval-bridge.ts)
 
 ## Transcript Mirroring
 
@@ -324,7 +324,7 @@ Transcript mirroring behavior:
 
 Primary module:
 
-- [src/app-server/transcript-mirror.ts](./src/app-server/transcript-mirror.ts)
+- [src/app-server/transcript-mirror.ts](../openclaw/codex/src/app-server/transcript-mirror.ts)
 
 ## Compaction, Reset, and Dispose
 
@@ -347,8 +347,8 @@ Dispose behavior:
 
 Primary modules:
 
-- [src/app-server/compact.ts](./src/app-server/compact.ts)
-- [harness.ts](./harness.ts)
+- [src/app-server/compact.ts](../openclaw/codex/src/app-server/compact.ts)
+- [harness.ts](../openclaw/codex/harness.ts)
 
 ## Test-Backed Invariants
 
@@ -369,13 +369,13 @@ The test suite establishes the following important guarantees:
 
 Representative tests:
 
-- [src/app-server/client.test.ts](./src/app-server/client.test.ts)
-- [src/app-server/run-attempt.test.ts](./src/app-server/run-attempt.test.ts)
-- [src/app-server/event-projector.test.ts](./src/app-server/event-projector.test.ts)
-- [src/app-server/approval-bridge.test.ts](./src/app-server/approval-bridge.test.ts)
-- [src/app-server/dynamic-tools.test.ts](./src/app-server/dynamic-tools.test.ts)
-- [src/app-server/transcript-mirror.test.ts](./src/app-server/transcript-mirror.test.ts)
-- [src/app-server/compact.test.ts](./src/app-server/compact.test.ts)
+- [src/app-server/client.test.ts](../openclaw/codex/src/app-server/client.test.ts)
+- [src/app-server/run-attempt.test.ts](../openclaw/codex/src/app-server/run-attempt.test.ts)
+- [src/app-server/event-projector.test.ts](../openclaw/codex/src/app-server/event-projector.test.ts)
+- [src/app-server/approval-bridge.test.ts](../openclaw/codex/src/app-server/approval-bridge.test.ts)
+- [src/app-server/dynamic-tools.test.ts](../openclaw/codex/src/app-server/dynamic-tools.test.ts)
+- [src/app-server/transcript-mirror.test.ts](../openclaw/codex/src/app-server/transcript-mirror.test.ts)
+- [src/app-server/compact.test.ts](../openclaw/codex/src/app-server/compact.test.ts)
 
 ## Known Ambiguities
 
@@ -389,4 +389,4 @@ The current implementation leaves a few edges that are not fully pinned down by 
 
 ## Repository Caveat
 
-The source module appears internally coherent, but this checkout currently lacks the base TypeScript config referenced by [tsconfig.json](./tsconfig.json), so a full compile could not be verified from this package alone.
+The source module appears internally coherent, but this checkout currently lacks the base TypeScript config referenced by [tsconfig.json](../openclaw/codex/tsconfig.json), so a full compile could not be verified from this package alone.
