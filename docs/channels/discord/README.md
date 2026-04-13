@@ -1,8 +1,6 @@
-> Back to [README](../../../README.md)
-
 # Discord
 
-Discord is a free voice, video, and text chat application designed for communities. PicoClaw connects to Discord servers via the Discord Bot API, supporting both receiving and sending messages.
+Discord is one of the two supported chat channels in this fork, alongside Telegram. It connects through the shared PicoClaw channel manager and supports both DMs and server conversations.
 
 ## Configuration
 
@@ -11,7 +9,6 @@ Discord is a free voice, video, and text chat application designed for communiti
   "channels": {
     "discord": {
       "enabled": true,
-      "token": "YOUR_BOT_TOKEN",
       "allow_from": ["YOUR_USER_ID"],
       "group_trigger": {
         "mention_only": false
@@ -24,9 +21,16 @@ Discord is a free voice, video, and text chat application designed for communiti
 | Field         | Type   | Required | Description                                                                 |
 | ------------- | ------ | -------- | --------------------------------------------------------------------------- |
 | enabled       | bool   | Yes      | Whether to enable the Discord channel                                       |
-| token         | string | Yes      | Discord Bot Token                                                           |
 | allow_from    | array  | No       | Allowlist of user IDs; empty means all users are allowed                    |
 | group_trigger | object | No       | Group trigger settings (example: { "mention_only": false })                 |
+
+Store the bot token in `.security.yml`:
+
+```yaml
+channels:
+  discord:
+    token: "YOUR_BOT_TOKEN"
+```
 
 ## Setup
 
@@ -35,5 +39,5 @@ Discord is a free voice, video, and text chat application designed for communiti
    - Message Content Intent
    - Server Members Intent
 3. Obtain the Bot Token
-4. Fill in the Bot Token in the configuration file
+4. Put the Bot Token in `.security.yml`
 5. Invite the bot to your server and grant the necessary permissions (e.g. Send Messages, Read Message History)
