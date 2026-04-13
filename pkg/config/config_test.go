@@ -443,6 +443,66 @@ func TestSaveConfig_RoundTripsNonModelSecurityConfig(t *testing.T) {
 	}
 }
 
+func TestSaveConfig_DoesNotUpdateMainConfigIfSecurityWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	securityPath := securityPath(configPath)
+	original := `{"version":1,"gateway":{"log_level":"debug"}}`
+
+	if err := os.WriteFile(configPath, []byte(original), 0o600); err != nil {
+		t.Fatalf("WriteFile(configPath) failed: %v", err)
+	}
+	if err := os.Mkdir(securityPath, 0o700); err != nil {
+		t.Fatalf("Mkdir(securityPath) failed: %v", err)
+	}
+
+	cfg := DefaultConfig()
+	cfg.Gateway.LogLevel = "error"
+	cfg.Channels.Telegram.Token = *NewSecureString("telegram-secret-token")
+
+	err := SaveConfig(configPath, cfg)
+	if err == nil {
+		t.Fatal("SaveConfig error = nil, want security write failure")
+	}
+
+	data, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(configPath) failed: %v", readErr)
+	}
+	if string(data) != original {
+		t.Fatalf("config.json changed despite security write failure, got: %s", string(data))
+	}
+}
+
+func TestLoadConfig_RejectsLegacySecuritySidecar(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	securityPath := securityPath(configPath)
+
+	if err := os.WriteFile(configPath, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(configPath) failed: %v", err)
+	}
+	legacySecurity := `model_list:
+  gpt-5.4:
+    api_keys:
+      - sk-test
+providers:
+  openai:
+    api_key: sk-test
+`
+	if err := os.WriteFile(securityPath, []byte(legacySecurity), 0o600); err != nil {
+		t.Fatalf("WriteFile(securityPath) failed: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Fatal("LoadConfig error = nil, want legacy sidecar rejection")
+	}
+	if !strings.Contains(err.Error(), "legacy model/provider config is no longer supported") {
+		t.Fatalf("LoadConfig error = %q, want legacy rejection message", err.Error())
+	}
+}
+
 // TestConfig_Complete verifies all config fields are set
 func TestConfig_Complete(t *testing.T) {
 	cfg := DefaultConfig()

@@ -1132,16 +1132,16 @@ func SaveConfig(path string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	logger.Infof("saving config to %s", path)
-	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
-		return err
-	}
 	sec := &SecurityConfig{
 		Channels: cfg.Channels,
 		Tools:    cfg.Tools,
 	}
 	if err := saveSecurityConfig(securityPath(path), sec); err != nil {
 		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
+		return err
+	}
+	logger.Infof("saving config to %s", path)
+	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return err
 	}
 	return nil
@@ -1173,6 +1173,9 @@ func (c *Config) SecurityCopyFrom(path string) error {
 			return nil
 		}
 		return fmt.Errorf("failed to read security config: %w", err)
+	}
+	if err := rejectLegacySecurityConfigData(data); err != nil {
+		return err
 	}
 	if err := yaml.Unmarshal(data, c); err != nil {
 		return fmt.Errorf("failed to parse security config: %w", err)

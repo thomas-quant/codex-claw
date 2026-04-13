@@ -49,6 +49,10 @@ func loadSecurityConfig(sec *SecurityConfig, securityPath string) error {
 		return fmt.Errorf("failed to read security config: %w", err)
 	}
 
+	if err := rejectLegacySecurityConfigData(data); err != nil {
+		return err
+	}
+
 	if err := yaml.Unmarshal(data, sec); err != nil {
 		return fmt.Errorf("failed to parse security config: %w", err)
 	}
@@ -66,6 +70,27 @@ func saveSecurityConfig(securityPath string, sec *SecurityConfig) error {
 		return fmt.Errorf("failed to marshal security config: %w", err)
 	}
 	return fileutil.WriteFileAtomic(securityPath, buf.Bytes(), 0o600)
+}
+
+func rejectLegacySecurityConfigData(data []byte) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("failed to parse security config: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return nil
+	}
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		switch doc.Content[i].Value {
+		case "model_list", "providers":
+			return fmt.Errorf("legacy model/provider config is no longer supported")
+		}
+	}
+	return nil
 }
 
 // SensitiveDataCache caches the strings.Replacer for filtering sensitive data.
