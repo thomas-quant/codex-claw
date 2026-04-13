@@ -15,15 +15,15 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/gorilla/websocket"
 
-	"github.com/sipeed/picoclaw/pkg/audio"
-	"github.com/sipeed/picoclaw/pkg/audio/tts"
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/channels"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/identity"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/media"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/sipeed/codex-claw/pkg/audio"
+	"github.com/sipeed/codex-claw/pkg/audio/tts"
+	"github.com/sipeed/codex-claw/pkg/bus"
+	"github.com/sipeed/codex-claw/pkg/channels"
+	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/identity"
+	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/media"
+	"github.com/sipeed/codex-claw/pkg/utils"
 )
 
 const (

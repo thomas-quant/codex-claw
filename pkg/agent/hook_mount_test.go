@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/bus"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 type builtinAutoHookConfig struct {

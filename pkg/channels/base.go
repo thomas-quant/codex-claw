@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/identity"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/media"
+	"github.com/sipeed/codex-claw/pkg/bus"
+	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/identity"
+	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/media"
 )
 
 var (
@@ -114,7 +114,7 @@ func NewBaseChannel(
 	}
 
 	// Security Audit: Check for open-by-default (unsecured) channels.
-	// PicoClaw aims to be secure-by-default. If allow_from is empty, the bot
+	// Codex Claw aims to be secure-by-default. If allow_from is empty, the bot
 	// currently defaults to accepting messages from ANYONE. To explicitly
 	// acknowledge and permit this (e.g. for a public bot), use ["*"].
 	if len(bc.allowList) == 0 {

@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/codex-claw/pkg/providers"
 )
 
 func msg(role, content string) providers.Message {

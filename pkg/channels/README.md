@@ -19,7 +19,7 @@
 Each channel package owns transport-specific work:
 
 - connect and reconnect to the platform API
-- translate platform events into PicoClaw bus messages
+- translate platform events into Codex Claw bus messages
 - send text and media replies
 - enforce channel allowlists and thread identity rules
 - surface optional capabilities such as typing, placeholders, message edits, and reactions when the platform supports them

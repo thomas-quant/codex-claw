@@ -3,7 +3,7 @@ package asr
 import (
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 func TestDetectTranscriber_NoConfigReturnsNil(t *testing.T) {

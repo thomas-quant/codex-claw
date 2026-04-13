@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sipeed/picoclaw/pkg/codexruntime"
+	"github.com/sipeed/codex-claw/pkg/codexruntime"
 )
 
 const codexAppServerDefaultModel = "codex-app-server"

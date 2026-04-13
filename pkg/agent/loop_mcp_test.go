@@ -1,8 +1,8 @@
-// PicoClaw - Ultra-lightweight personal AI agent
+// Codex Claw - Ultra-lightweight personal AI agent
 // Inspired by and based on nanobot: https://github.com/HKUDS/nanobot
 // License: MIT
 //
-// Copyright (c) 2026 PicoClaw contributors
+// Copyright (c) 2026 Codex Claw contributors
 
 package agent
 
@@ -15,9 +15,9 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	picoclawmcp "github.com/sipeed/picoclaw/pkg/mcp"
-	"github.com/sipeed/picoclaw/pkg/tools"
+	"github.com/sipeed/codex-claw/pkg/config"
+	codexclawmcp "github.com/sipeed/codex-claw/pkg/mcp"
+	"github.com/sipeed/codex-claw/pkg/tools"
 )
 
 func boolPtr(b bool) *bool { return &b }
@@ -178,7 +178,7 @@ func TestRegisterMCPToolsForAgents_RegistersOnlyAllowedServers(t *testing.T) {
 	noMCPAgent := &AgentInstance{ID: "plain-agent", Workspace: t.TempDir(), Tools: tools.NewToolRegistry()}
 	writeAgentFile(t, noMCPAgent.Workspace, "---\nname: plain\n---\n# agent\n")
 
-	servers := map[string]*picoclawmcp.ServerConnection{
+	servers := map[string]*codexclawmcp.ServerConnection{
 		"github": {
 			Name: "github",
 			Tools: []*sdkmcp.Tool{
@@ -229,7 +229,7 @@ func TestRegisterMCPToolsForAgents_DeferredToolsStayScoped(t *testing.T) {
 		map[string]config.MCPServerConfig{
 			"github": {Enabled: true, Deferred: boolPtr(true)},
 		},
-		map[string]*picoclawmcp.ServerConnection{
+		map[string]*codexclawmcp.ServerConnection{
 			"github": {
 				Name: "github",
 				Tools: []*sdkmcp.Tool{
@@ -262,7 +262,7 @@ func TestRegisterMCPToolsForAgents_DiscoveryToolsOnlyForAgentsWithDeferredMCP(t 
 		map[string]config.MCPServerConfig{
 			"github": {Enabled: true, Deferred: boolPtr(true)},
 		},
-		map[string]*picoclawmcp.ServerConnection{
+		map[string]*codexclawmcp.ServerConnection{
 			"github": {
 				Name: "github",
 				Tools: []*sdkmcp.Tool{

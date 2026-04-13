@@ -7,18 +7,18 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg"
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
-func TestResolveInstanceRoot_UsesPicoclawHome(t *testing.T) {
-	t.Setenv(config.EnvHome, "/custom/picoclaw/home")
+func TestResolveInstanceRoot_UsesCodexClawHome(t *testing.T) {
+	t.Setenv(config.EnvHome, "/custom/codex-claw/home")
 	root, err := ResolveInstanceRoot()
 	if err != nil {
 		t.Fatalf("ResolveInstanceRoot() error = %v", err)
 	}
-	if root != "/custom/picoclaw/home" {
-		t.Fatalf("ResolveInstanceRoot() = %q, want %q", root, "/custom/picoclaw/home")
+	if root != "/custom/codex-claw/home" {
+		t.Fatalf("ResolveInstanceRoot() = %q, want %q", root, "/custom/codex-claw/home")
 	}
 }
 
@@ -140,7 +140,7 @@ func TestBuildLinuxMountPlan(t *testing.T) {
 
 func TestBuildWindowsAccessRules(t *testing.T) {
 	rules := BuildWindowsAccessRules(
-		`C:\picoclaw`,
+		`C:\codex-claw`,
 		[]config.ExposePath{{Source: `D:\data`, Target: `C:\mapped`, Mode: "ro"}},
 	)
 	if len(rules) == 0 {
@@ -149,7 +149,7 @@ func TestBuildWindowsAccessRules(t *testing.T) {
 	foundRoot := false
 	foundOverride := false
 	for _, rule := range rules {
-		if rule.Path == `C:\picoclaw` && rule.Mode == "rw" {
+		if rule.Path == `C:\codex-claw` && rule.Mode == "rw" {
 			foundRoot = true
 		}
 		if rule.Path == `D:\data` && rule.Mode == "ro" {

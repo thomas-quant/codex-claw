@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/logger"
 )
 
 type MimoTTSProvider struct {

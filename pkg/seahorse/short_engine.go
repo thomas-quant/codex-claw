@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/logger"
 )
 
 // Config holds engine configuration.

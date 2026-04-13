@@ -2,7 +2,7 @@
 
 Voice output is deferred in the current Codex-first fork.
 
-This package is kept as a historical note for deployments that add an explicit runtime-native voice stack, but it is not a supported active setup path in PicoClaw today.
+This package is kept as a historical note for deployments that add an explicit runtime-native voice stack, but it is not a supported active setup path in Codex Claw today.
 
 ## What Changed
 

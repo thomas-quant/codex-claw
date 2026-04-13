@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/logger"
 )
 
 func TestAgentModelConfig_UnmarshalString(t *testing.T) {
@@ -250,7 +250,7 @@ func captureWarnLogOutput(t *testing.T, fn func()) string {
 	logger.DisableFileLogging()
 	logger.SetLevel(logger.WARN)
 
-	logPath := filepath.Join(t.TempDir(), "picoclaw.log")
+	logPath := filepath.Join(t.TempDir(), "codex-claw.log")
 	if err := logger.EnableFileLogging(logPath); err != nil {
 		t.Fatalf("EnableFileLogging() error: %v", err)
 	}
@@ -852,7 +852,7 @@ func TestLoadConfig_HooksProcessConfig(t *testing.T) {
       "review-gate": {
         "enabled": true,
         "transport": "stdio",
-        "command": ["uvx", "picoclaw-hook-reviewer"],
+        "command": ["uvx", "codex-claw-hook-reviewer"],
         "dir": "/tmp/hooks",
         "env": {
           "HOOK_MODE": "rewrite"
@@ -967,10 +967,10 @@ func TestDefaultConfig_WorkspacePath_Default(t *testing.T) {
 }
 
 func TestDefaultConfig_WorkspacePath_WithCodexClawHome(t *testing.T) {
-	t.Setenv(EnvHome, "/custom/picoclaw/home")
+	t.Setenv(EnvHome, "/custom/codex-claw/home")
 
 	cfg := DefaultConfig()
-	want := filepath.Join("/custom/picoclaw/home", "workspace")
+	want := filepath.Join("/custom/codex-claw/home", "workspace")
 
 	if cfg.Agents.Defaults.Workspace != want {
 		t.Errorf("Workspace path with %s = %q, want %q", EnvHome, cfg.Agents.Defaults.Workspace, want)

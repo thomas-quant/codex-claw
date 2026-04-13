@@ -52,7 +52,7 @@ type RunTurnRequest struct {
 
 func NewClient(transport Transport, opts ClientOptions) *Client {
 	if opts.ClientName == "" {
-		opts.ClientName = "picoclaw"
+		opts.ClientName = "codex-claw"
 	}
 	if opts.ClientVersion == "" {
 		opts.ClientVersion = "0.0.0"

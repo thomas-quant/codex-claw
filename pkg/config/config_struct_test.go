@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 
-	"github.com/sipeed/picoclaw/pkg/credential"
+	"github.com/sipeed/codex-claw/pkg/credential"
 )
 
 func TestLoadSecurityValue(t *testing.T) {
@@ -188,6 +188,6 @@ func TestConfigStructs_DoNotExposeLegacyEnvPrefixes(t *testing.T) {
 	walk(reflect.TypeOf(GatewayConfig{}), "GatewayConfig")
 
 	if len(bad) > 0 {
-		t.Fatalf("legacy PicoClaw env tags remain:\n%s", strings.Join(bad, "\n"))
+		t.Fatalf("legacy Codex Claw env tags remain:\n%s", strings.Join(bad, "\n"))
 	}
 }

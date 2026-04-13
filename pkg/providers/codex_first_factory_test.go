@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 func TestCreateProvider_UsesExplicitStartupModelOverride(t *testing.T) {

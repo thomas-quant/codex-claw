@@ -3,7 +3,7 @@ package commands
 import (
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 // ModelInfo describes a runtime-visible model entry.

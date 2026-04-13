@@ -70,15 +70,15 @@ var ErrDecryptionFailed = errors.New("credential: enc:// decryption failed (wron
 // SSH private key used for enc:// credential encryption and decryption.
 const SSHKeyPathEnvVar = "CODEX_CLAW_SSH_KEY_PATH"
 
-// picoclawHome is a package-local copy of config.EnvHome. It is kept here to
+// codexClawHome is a package-local copy of config.EnvHome. It is kept here to
 // avoid a circular import between pkg/credential and pkg/config.
-const picoclawHome = "CODEX_CLAW_HOME"
+const codexClawHome = "CODEX_CLAW_HOME"
 
 const (
 	FileScheme = "file://"
 	EncScheme  = "enc://"
 
-	hkdfInfo = "picoclaw-credential-v1"
+	hkdfInfo = "codex-claw-credential-v1"
 	saltLen  = 16
 	nonceLen = 12
 	keyLen   = 32
@@ -263,7 +263,7 @@ func allowedSSHKeyPath(path string) bool {
 	}
 
 	// Within CODEX_CLAW_HOME.
-	if picoHome := os.Getenv(picoclawHome); picoHome != "" {
+	if picoHome := os.Getenv(codexClawHome); picoHome != "" {
 		if isWithinDir(clean, picoHome) {
 			return true
 		}
@@ -282,7 +282,7 @@ func allowedSSHKeyPath(path string) bool {
 // deriveKey derives a 32-byte AES-256 key from passphrase and SSH private key.
 //
 // ikm = HMAC-SHA256(key=SHA256(sshKeyBytes), msg=passphrase)
-// Final key: HKDF-SHA256(ikm, salt, info="picoclaw-credential-v1", 32 bytes)
+// Final key: HKDF-SHA256(ikm, salt, info="codex-claw-credential-v1", 32 bytes)
 // sshKeyPath must be non-empty; returns an error otherwise.
 func deriveKey(passphrase, sshKeyPath string, salt []byte) ([]byte, error) {
 	if sshKeyPath == "" {

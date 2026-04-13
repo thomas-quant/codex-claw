@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/codex-claw/pkg/providers"
 )
 
 func shouldAutoFallbackToDeepSeek(err error) bool {

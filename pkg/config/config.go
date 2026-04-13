@@ -13,9 +13,9 @@ import (
 	"github.com/caarlos0/env/v11"
 	"gopkg.in/yaml.v3"
 
-	"github.com/sipeed/picoclaw/pkg"
-	"github.com/sipeed/picoclaw/pkg/fileutil"
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg"
+	"github.com/sipeed/codex-claw/pkg/fileutil"
+	"github.com/sipeed/codex-claw/pkg/logger"
 )
 
 // rrCounter is a global counter for round-robin load balancing across models.

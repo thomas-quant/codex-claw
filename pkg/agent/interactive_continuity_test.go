@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/codex-claw/pkg/providers"
 )
 
 func TestBuildInteractiveBootstrapInput_UsesRecentTurnsAndCurrentMessage(t *testing.T) {

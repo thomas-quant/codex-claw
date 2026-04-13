@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 // FallbackChain orchestrates model fallback across multiple candidates.

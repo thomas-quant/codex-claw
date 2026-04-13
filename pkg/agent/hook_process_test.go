@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/isolation"
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/isolation"
+	"github.com/sipeed/codex-claw/pkg/providers"
 )
 
 func TestProcessHook_HelperProcess(t *testing.T) {
@@ -191,7 +191,7 @@ func TestAgentLoop_MountProcessHook_IsolationSupportsRelativeDirAndCommand(t *te
 	defer cleanup()
 
 	root := t.TempDir()
-	t.Setenv(config.EnvHome, filepath.Join(root, "picoclaw-home"))
+	t.Setenv(config.EnvHome, filepath.Join(root, "codex-claw-home"))
 	binDir := filepath.Join(root, "bin")
 	hookDir := filepath.Join(root, "hooks")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
