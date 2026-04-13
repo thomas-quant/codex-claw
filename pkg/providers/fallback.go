@@ -3,8 +3,11 @@ package providers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/sipeed/picoclaw/pkg/config"
 )
 
 // FallbackChain orchestrates model fallback across multiple candidates.
@@ -99,6 +102,33 @@ func ResolveCandidatesWithLookup(
 	}
 
 	return candidates
+}
+
+// DeepSeekFallbackModelConfig builds the HTTP model config used by the runtime
+// DeepSeek fallback block.
+func DeepSeekFallbackModelConfig(cfg *config.Config) (*config.ModelConfig, bool) {
+	if cfg == nil || !cfg.Runtime.Fallback.DeepSeek.Enabled {
+		return nil, false
+	}
+
+	model := strings.TrimSpace(cfg.Runtime.Fallback.DeepSeek.Model)
+	if model == "" {
+		model = "deepseek-chat"
+	}
+
+	apiBase := strings.TrimSpace(cfg.Runtime.Fallback.DeepSeek.APIBase)
+	if apiBase == "" {
+		apiBase = getDefaultAPIBase("deepseek")
+	}
+
+	return &config.ModelConfig{
+		ModelName: "deepseek-fallback",
+		Model:     "deepseek/" + model,
+		APIKeyValue: func() config.SecureString {
+			return *config.NewSecureString(strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")))
+		}(),
+		APIBase: apiBase,
+	}, true
 }
 
 // Execute runs the fallback chain for text/chat requests.
