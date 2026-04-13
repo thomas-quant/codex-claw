@@ -38,7 +38,7 @@ Legacy fallback arrays are no longer part of the runtime contract. The following
 - structured `model.fallbacks`
 - structured `subagents.model.fallbacks`
 
-Codex auth is not configured here at all. `codex app-server` is expected to start inside an already-authenticated environment.
+Codex auth is not configured here at all. Start `codex app-server` in a shell where Codex is already authenticated.
 
 ## Agents
 

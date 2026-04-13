@@ -131,7 +131,7 @@ Baidu Search uses the [Qianfan AI Search API](https://cloud.baidu.com/doc/qianfa
 
 | Config                   | Type     | Default | Description                                                    |
 |--------------------------|----------|---------|----------------------------------------------------------------|
-| `prefer_native`          | bool     | true    | Prefer provider's native search over configured search engines |
+| `prefer_native`          | bool     | true    | Prefer the search backend's native search over configured search engines |
 | `private_host_whitelist` | string[] | `[]`    | Private/internal hosts allowed for web fetching                |
 
 ### `web_search` Tool Parameters

@@ -2,12 +2,12 @@
 
 ## Supported Runtime Paths
 
-This fork keeps two model paths:
+This fork keeps two runtime paths:
 
 - `codex`: primary runtime via `codex app-server`
 - `deepseek`: fallback HTTP path
 
-Everything else from the old provider matrix is removed.
+Everything else from the pre-fork provider catalog is out of scope for the active docs.
 
 Legacy fallback arrays such as `model_fallbacks`, `image_model_fallbacks`, `model.fallbacks`, and `subagents.model.fallbacks` are deprecated. PicoClaw may still parse them for compatibility, but the runtime ignores them.
 
@@ -33,7 +33,7 @@ Runtime defaults live in `runtime.codex`:
 }
 ```
 
-Codex authentication is external. The app starts `codex app-server` inside an auth-prepared environment and does not read Codex credentials from config.
+Codex authentication is external. The app starts `codex app-server` inside an already-authenticated shell and does not read Codex credentials from config.
 
 ## DeepSeek Fallback
 
@@ -65,4 +65,4 @@ Those overrides do not create a configurable fallback chain. Automatic fallback 
 
 ## Voice Note
 
-Legacy voice auto-detection through `model_list` is gone. If voice support stays in the fork, it should come back as an explicit runtime-native config path rather than through the deleted provider catalog.
+Voice support is not part of the active Codex-first runtime contract. If it returns, it should use an explicit runtime-native config path instead of the deleted provider catalog.

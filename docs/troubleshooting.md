@@ -10,12 +10,12 @@ Symptoms:
 Checks:
 
 1. Confirm the Codex binary and app-server entrypoint are installed and runnable in the current shell.
-2. Confirm you launched PicoClaw inside the auth-prepared environment used by your Codex auth package.
+2. Confirm you launched PicoClaw from a shell where Codex is already authenticated.
 3. Check the process logs for the first startup error instead of retrying blindly.
 
 ## No default model is available
 
-This fork no longer uses `model_list`. Runtime defaults live under `runtime.codex`.
+This fork no longer uses the old model catalog. Runtime defaults live under `runtime.codex`.
 
 Check:
 

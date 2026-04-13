@@ -15,7 +15,6 @@
 - Remove or hard-deprecate legacy `model_fallbacks` config/frontmatter fields now that automatic runtime failover is explicitly Codex -> DeepSeek only.
 - Tighten recovery behavior further if needed; runtime now supports restart + resume retry, but future work may want more explicit recovery-state handling from the agent layer.
 - If voice support returns later, reintroduce ASR/TTS through an explicit runtime-native config path.
-- Rewrite `pkg/audio/asr/README.md` and `pkg/audio/tts/README.md` to remove `model_list` and other provider-era setup instructions.
 - Rewrite the matching localized ASR/TTS docs if they are kept, or delete them if voice docs are not worth maintaining during the fork.
 - Replace removed channel names used as generic examples in tests/docs where they no longer reflect the fork boundary (`whatsapp`, `slack`, `feishu`, etc.).
 - Review localized docs for any remaining deleted-channel, deleted-migration, or provider-era setup references.
