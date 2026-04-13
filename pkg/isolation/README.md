@@ -1,8 +1,8 @@
 # `pkg/isolation`
 
-`pkg/isolation` provides process-level isolation for child processes started by `picoclaw`.
+`pkg/isolation` provides process-level isolation for child processes started by `codex-claw`.
 
-It does not sandbox the main `picoclaw` process itself.
+It does not sandbox the main `codex-claw` process itself.
 
 ## Scope
 
@@ -15,7 +15,7 @@ The current scope is the child-process startup path:
 
 ## One-Sentence Model
 
-- The `picoclaw` main process still runs in the host environment.
+- The `codex-claw` main process still runs in the host environment.
 - Every child process should enter the shared `pkg/isolation` startup path first.
 - The startup path applies platform-specific isolation according to config.
 
@@ -62,7 +62,7 @@ Example:
       },
       {
         "source": "/data/shared-assets",
-        "target": "/opt/picoclaw-instance-a/workspace/assets",
+        "target": "/opt/codex-claw-instance-a/workspace/assets",
         "mode": "rw"
       }
     ]
@@ -219,7 +219,7 @@ They complement each other and do not replace each other.
 - Linux does not currently enable a dedicated `pid` namespace by default.
 - Windows does not yet implement full host ACL enforcement for every allowed or denied path.
 - macOS is not implemented.
-- The current design isolates child processes, not the main `picoclaw` process.
+- The current design isolates child processes, not the main `codex-claw` process.
 
 ## Suggested Reading Order
 

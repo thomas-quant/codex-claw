@@ -4,16 +4,16 @@ Status: Draft
 
 Related documents:
 
-- [Codex App-Server Harness Spec](/root/picoclaw/reference/codex-app-server/harness-spec.md)
-- [codex-app-serv.md](/root/picoclaw/reference/codex-app-server/official-summary.md)
-- [codex-app-serv.part-01.md](/root/picoclaw/reference/codex-app-server/official-summary.part-01.md)
-- [codex-app-serv.part-05.md](/root/picoclaw/reference/codex-app-server/official-summary.part-05.md)
+- [Codex App-Server Harness Spec](../../reference/codex-app-server/harness-spec.md)
+- [codex-app-serv.md](../../reference/codex-app-server/official-summary.md)
+- [codex-app-serv.part-01.md](../../reference/codex-app-server/official-summary.part-01.md)
+- [codex-app-serv.part-05.md](../../reference/codex-app-server/official-summary.part-05.md)
 
 ## 1. Purpose
 
-This document defines the PicoClaw fork as a Codex-first runtime.
+This document defines the codex-claw fork as a Codex-first runtime.
 
-The fork keeps PicoClaw's agent, workspace, tool, memory, cron, MCP, and channel backbone, but replaces the current
+The fork keeps codex-claw's agent, workspace, tool, memory, cron, MCP, and channel backbone, but replaces the current
 general-purpose provider stack with a narrow runtime:
 
 - primary model runtime: Codex app-server over `stdio`
@@ -22,20 +22,20 @@ general-purpose provider stack with a narrow runtime:
 - no web launcher or browser auth surface
 
 This is a constrained behavioral port. OpenClaw remains the semantic reference for Codex app-server behavior, but the
-runtime is rebuilt in Go around PicoClaw's own abstractions and persistence model.
+runtime is rebuilt in Go around codex-claw's own abstractions and persistence model.
 
-Codex authentication is external to PicoClaw. The fork starts `codex app-server` directly inside an auth-prepared
-environment or home and does not preserve PicoClaw's old OAuth or credential-management framework.
+Codex authentication is external to codex-claw. The fork starts `codex app-server` directly inside an auth-prepared
+environment or home and does not preserve codex-claw's old OAuth or credential-management framework.
 
 ## 2. Goals
 
 ### 2.1 Goals
 
-- Preserve PicoClaw's multi-agent workspace model, hooks, skills, cron, memory, and generic channel manager.
-- Keep Codex behind PicoClaw abstractions rather than creating a separate host runtime.
-- Make PicoClaw session history the source of truth for recovery and persistence.
+- Preserve codex-claw's multi-agent workspace model, hooks, skills, cron, memory, and generic channel manager.
+- Keep Codex behind codex-claw abstractions rather than creating a separate host runtime.
+- Make codex-claw session history the source of truth for recovery and persistence.
 - Stream only final assistant text to Telegram and Discord.
-- Keep full PicoClaw tool support, including PicoClaw-managed MCP, through the Codex app-server bridge.
+- Keep full codex-claw tool support, including codex-claw-managed MCP, through the Codex app-server bridge.
 - Reduce config, provider, auth, and channel surface to the minimum needed for this fork.
 
 ### 2.2 Non-goals
@@ -47,9 +47,9 @@ environment or home and does not preserve PicoClaw's old OAuth or credential-man
 
 ## 3. Locked Product Decisions
 
-- Codex app-server stays behind PicoClaw's abstraction layer.
-- PicoClaw local session state is authoritative; Codex thread state is an execution mirror.
-- Prompt/context assembly stays close to the current PicoClaw shape.
+- Codex app-server stays behind codex-claw's abstraction layer.
+- codex-claw local session state is authoritative; Codex thread state is an execution mirror.
+- Prompt/context assembly stays close to the current codex-claw shape.
 - Codex tool execution is adapted onto `pkg/tools` and `pkg/isolation`.
 - The fork is unapologetically Codex-first. Old provider/model/config machinery is removed rather than carried in
   compatibility mode.
@@ -60,7 +60,7 @@ environment or home and does not preserve PicoClaw's old OAuth or credential-man
 - Cron/background runs always start a fresh Codex thread, but still append to the agent's normal local session history.
 - AGENT frontmatter `model` remains a per-agent default.
 - AGENT frontmatter `tools`, `skills`, and `mcpServers` become strict allowlists.
-- PicoClaw-managed MCP stays; Codex-native MCP is disabled.
+- codex-claw-managed MCP stays; Codex-native MCP is disabled.
 - MCP discovery/deferred loading and large-payload artifact behavior stay.
 - DeepSeek fallback is narrow: only startup/connect/resume failure and usage exhaustion trigger automatic fallback.
 
@@ -89,7 +89,7 @@ codex app-server         HTTPS API
 
 The important boundary is:
 
-- Codex remains selected and owned through PicoClaw's model/provider flow.
+- Codex remains selected and owned through codex-claw's model/provider flow.
 - The generic request-response provider path remains for DeepSeek.
 - Codex app-server uses an extended provider capability because plain `Chat()` is not rich enough for thread binding,
   native compaction, approvals, and tool-call streaming.
@@ -118,7 +118,7 @@ The important boundary is:
   - `binding_store.go`: disk persistence for per-thread Codex bindings and runtime settings
   - `projector.go`: canonical event projection and final-response selection
   - `tool_bridge.go`: bridge between Codex dynamic tool calls and `pkg/tools`
-  - `approval_bridge.go`: permanent-YOLO approval responder inside PicoClaw policy limits
+  - `approval_bridge.go`: permanent-YOLO approval responder inside codex-claw policy limits
   - `runner.go`: start/resume/interrupt/compact attempt execution
   - `status.go`: status payloads for CLI and channel commands
 
@@ -164,22 +164,22 @@ interface for interactive runtimes. The agent loop checks for that capability an
 Design intent:
 
 - DeepSeek continues to use the existing LLM request path.
-- Codex uses a richer turn runner without bypassing PicoClaw's provider selection boundary.
+- Codex uses a richer turn runner without bypassing codex-claw's provider selection boundary.
 
-This preserves the user's requested architecture: Codex stays behind PicoClaw abstractions, but PicoClaw no longer
+This preserves the user's requested architecture: Codex stays behind codex-claw abstractions, but codex-claw no longer
 pretends Codex is just another HTTP completion endpoint.
 
 ## 6. Session and Thread Model
 
 ## 6.1 Source of truth
 
-PicoClaw's local session history remains canonical.
+codex-claw's local session history remains canonical.
 
-Codex thread state is a live execution mirror that may be resumed, discarded, or reseeded from PicoClaw history.
+Codex thread state is a live execution mirror that may be resumed, discarded, or reseeded from codex-claw history.
 
 This means:
 
-- recovery decisions are made from PicoClaw session state first
+- recovery decisions are made from codex-claw session state first
 - Codex bindings are durable but disposable
 - DeepSeek fallback always has a usable local transcript even when Codex thread state is lost
 
@@ -209,7 +209,7 @@ The binding store should persist:
 - `last_user_message_at`
 - runtime metadata needed for restart and compaction bookkeeping
 
-The exact on-disk layout can be fork-native. Compatibility with current PicoClaw metadata is not required.
+The exact on-disk layout can be fork-native. Compatibility with current codex-claw metadata is not required.
 
 ## 6.4 Runtime settings
 
@@ -228,7 +228,7 @@ If the app-server fails mid-run or on resume:
 1. restart the app-server once
 2. attempt `thread/resume` once
 3. if resume still fails, create a fresh Codex thread
-4. seed that fresh thread from the last 3 turns from PicoClaw session history
+4. seed that fresh thread from the last 3 turns from codex-claw session history
 
 Normal restarts and channel reconnects should resume the existing binding whenever possible.
 
@@ -236,12 +236,12 @@ Normal restarts and channel reconnects should resume the existing binding whenev
 
 ## 7.1 Context assembly
 
-The current PicoClaw context builder remains the main context source.
+The current codex-claw context builder remains the main context source.
 
-The Codex port should not replace PicoClaw's session, memory, hook, or workspace prompt assembly with an OpenClaw-style
+The Codex port should not replace codex-claw's session, memory, hook, or workspace prompt assembly with an OpenClaw-style
 transcript-first model. Instead:
 
-- PicoClaw builds the effective prompt and history
+- codex-claw builds the effective prompt and history
 - Codex receives that state through the app-server turn model
 - Codex thread persistence accelerates and stabilizes execution, but does not replace local transcript ownership
 
@@ -269,28 +269,28 @@ Each scheduled run gets:
 
 ## 8. Tool, MCP, and Approval Model
 
-## 8.1 PicoClaw remains the tool host
+## 8.1 codex-claw remains the tool host
 
 Codex app-server does not become the primary tool system.
 
-Instead, PicoClaw remains the owner of:
+Instead, codex-claw remains the owner of:
 
 - local tools in `pkg/tools`
 - subprocess isolation in `pkg/isolation`
 - MCP server lifecycle in `pkg/mcp`
 - session logging of tool results
 
-The Codex tool bridge translates Codex app-server tool requests into PicoClaw tool executions and returns structured
+The Codex tool bridge translates Codex app-server tool requests into codex-claw tool executions and returns structured
 results back into the live Codex turn.
 
-## 8.2 MCP stays PicoClaw-managed
+## 8.2 MCP stays codex-claw-managed
 
-PicoClaw's existing MCP subsystem remains first-class:
+codex-claw's existing MCP subsystem remains first-class:
 
-- MCP servers are configured under PicoClaw config
-- PicoClaw starts or connects to MCP servers itself
-- discovered MCP tools are wrapped into normal PicoClaw tools
-- Codex sees them through the same PicoClaw tool bridge as any other tool
+- MCP servers are configured under codex-claw config
+- codex-claw starts or connects to MCP servers itself
+- discovered MCP tools are wrapped into normal codex-claw tools
+- Codex sees them through the same codex-claw tool bridge as any other tool
 
 Codex-native MCP management is disabled in v1.
 
@@ -318,7 +318,7 @@ This is a good fit for Codex because it keeps the runtime lean and avoids blowin
 
 ## 8.5 Tool failure loop guard
 
-If a PicoClaw tool call fails during a Codex turn:
+If a codex-claw tool call fails during a Codex turn:
 
 - return the failure result to Codex
 - let Codex attempt recovery in the same turn
@@ -329,12 +329,12 @@ The exact threshold can be a small config value with a hard default in the runti
 ## 8.6 Approvals
 
 Native app-server approvals remain part of the protocol surface, but the fork runs with effectively permanent YOLO
-behavior inside PicoClaw's sandbox and isolation constraints.
+behavior inside codex-claw's sandbox and isolation constraints.
 
 That means:
 
-- approval requests are auto-accepted where PicoClaw policy allows the action
-- PicoClaw sandbox and isolation rules still apply
+- approval requests are auto-accepted where codex-claw policy allows the action
+- codex-claw sandbox and isolation rules still apply
 - there is no interactive approval UX in v1
 
 ## 9. Event Projection and Streaming
@@ -362,7 +362,7 @@ CLI and admin status may expose richer Codex runtime internals for debugging.
 
 No web or launcher control surface survives in v1.
 
-Operational control lives in generic PicoClaw commands surfaced by channels and CLI.
+Operational control lives in generic codex-claw commands surfaced by channels and CLI.
 
 Required command set:
 
@@ -550,14 +550,14 @@ instead of churned repeatedly.
 
 ## 17. Summary
 
-This fork keeps PicoClaw's strong parts: agent structure, tools, MCP, memory, cron, and channels.
+This fork keeps codex-claw's strong parts: agent structure, tools, MCP, memory, cron, and channels.
 
 What changes is the runtime core:
 
 - Codex app-server becomes the primary execution engine
-- PicoClaw session state remains authoritative
+- codex-claw session state remains authoritative
 - DeepSeek becomes a narrow emergency fallback
 - provider/config/auth/channel sprawl is removed
 
-The result should feel like a lean Codex-native system built on PicoClaw's backbone, not a generic multi-provider bot
+The result should feel like a lean Codex-native system built on codex-claw's backbone, not a generic multi-provider bot
 that happens to support Codex.

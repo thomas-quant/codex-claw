@@ -195,8 +195,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/agent"
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/codex-claw/pkg/agent"
+	"github.com/sipeed/codex-claw/pkg/logger"
 )
 
 type ExampleLoggerHookOptions struct {
@@ -362,8 +362,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sipeed/picoclaw/pkg/agent"
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/sipeed/codex-claw/pkg/agent"
+	"github.com/sipeed/codex-claw/pkg/config"
 )
 
 func init() {

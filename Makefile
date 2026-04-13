@@ -3,7 +3,7 @@
 # Build variables
 BINARY_NAME=codex-claw
 BUILD_DIR=build
-CMD_DIR=cmd/picoclaw
+CMD_DIR=cmd/codex-claw
 MAIN_GO=$(CMD_DIR)/main.go
 EXT=
 
@@ -12,7 +12,7 @@ VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GIT_COMMIT=$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date +%FT%T%z)
 GO_VERSION=$(shell $(GO) version | awk '{print $$3}')
-CONFIG_PKG=github.com/sipeed/picoclaw/pkg/config
+CONFIG_PKG=github.com/sipeed/codex-claw/pkg/config
 LDFLAGS=-X $(CONFIG_PKG).Version=$(VERSION) -X $(CONFIG_PKG).GitCommit=$(GIT_COMMIT) -X $(CONFIG_PKG).BuildTime=$(BUILD_TIME) -X $(CONFIG_PKG).GoVersion=$(GO_VERSION) -s -w
 
 # Go variables
@@ -67,7 +67,7 @@ INSTALL_TMP_SUFFIX=.new
 CODEX_CLAW_HOME?=$(HOME)/.codex-claw
 WORKSPACE_DIR?=$(CODEX_CLAW_HOME)/workspace
 WORKSPACE_SKILLS_DIR=$(WORKSPACE_DIR)/skills
-BUILTIN_SKILLS_DIR=$(CURDIR)/skills
+BUILTIN_SKILLS_DIR=$(CURDIR)/workspace/skills
 DOCKER_COMPOSE_MIN?=docker/docker-compose.yml
 DOCKER_COMPOSE_FULL?=docker/docker-compose.full.yml
 DOCKER_AGENT_SERVICE?=codex-claw-agent
