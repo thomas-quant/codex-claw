@@ -55,7 +55,8 @@ func DefaultConfig() *Config {
 				SplitOnMarker: false,
 			},
 		},
-		Bindings: []AgentBinding{},
+		ModelList: []*ModelConfig{},
+		Bindings:  []AgentBinding{},
 		Session: SessionConfig{
 			DMScope: "per-channel-peer",
 		},

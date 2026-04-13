@@ -17,7 +17,6 @@ LDFLAGS=-X $(CONFIG_PKG).Version=$(VERSION) -X $(CONFIG_PKG).GitCommit=$(GIT_COM
 
 # Go variables
 GO?=CGO_ENABLED=0 go
-WEB_GO?=$(GO)
 GO_BUILD_TAGS?=goolm,stdjson
 GOFLAGS?=-v -tags $(GO_BUILD_TAGS)
 comma:=,
@@ -142,29 +141,6 @@ build: generate
 	@echo "Build complete: $(BINARY_PATH)$(EXT)"
 	@$(LNCMD) $(BINARY_NAME)-$(PLATFORM)-$(ARCH)$(EXT) $(BUILD_DIR)/$(BINARY_NAME)$(EXT)
 
-## build-launcher: Build the picoclaw-launcher (web console) binary
-build-launcher:
-	@echo "Building picoclaw-launcher for $(PLATFORM)/$(ARCH)..."
-	@mkdir -p $(BUILD_DIR)
-	@GOARCH=${ARCH} $(MAKE) -C web build \
-		OUTPUT="$(CURDIR)/$(BUILD_DIR)/picoclaw-launcher-$(PLATFORM)-$(ARCH)$(EXT)" \
-		WEB_GO='$(WEB_GO)' \
-		GO_BUILD_TAGS='$(GO_BUILD_TAGS)' \
-		LDFLAGS='$(LDFLAGS)'
-	@$(LNCMD) picoclaw-launcher-$(PLATFORM)-$(ARCH)$(EXT) $(BUILD_DIR)/picoclaw-launcher$(EXT)
-	@echo "Build complete: $(BUILD_DIR)/picoclaw-launcher$(EXT)"
-
-build-launcher-frontend:
-	@$(MAKE) -C web build-frontend
-
-## build-launcher-tui: Build the picoclaw-launcher TUI binary
-build-launcher-tui:
-	@echo "Building picoclaw-launcher-tui for $(PLATFORM)/$(ARCH)..."
-	@mkdir -p $(BUILD_DIR)
-	@$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/picoclaw-launcher-tui-$(PLATFORM)-$(ARCH) ./cmd/picoclaw-launcher-tui
-	@ln -sf picoclaw-launcher-tui-$(PLATFORM)-$(ARCH) $(BUILD_DIR)/picoclaw-launcher-tui
-	@echo "Build complete: $(BUILD_DIR)/picoclaw-launcher-tui"
-
 ## build-whatsapp-native: Build with WhatsApp native (whatsmeow) support; larger binary
 build-whatsapp-native: generate
 ## @echo "Building $(BINARY_NAME) with WhatsApp native for $(PLATFORM)/$(ARCH)..."
@@ -212,30 +188,6 @@ build-android-arm64: generate
 	GOOS=android GOARCH=arm64 $(GO) build -tags stdjson -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-android-arm64 ./$(CMD_DIR)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-android-arm64"
 
-## build-launcher-android-arm64: Build launcher for Android ARM64
-build-launcher-android-arm64:
-	@echo "Building picoclaw-launcher for android/arm64..."
-	@mkdir -p $(BUILD_DIR)
-	@$(MAKE) -C web build-android-arm64 \
-		OUTPUT="$(CURDIR)/$(BUILD_DIR)/picoclaw-launcher-android-arm64"
-	@echo "Build complete: $(BUILD_DIR)/picoclaw-launcher-android-arm64"
-
-## build-android-bundle: Build core and launcher for all Android architectures and package as universal zip
-build-android-bundle: generate
-	@echo "Building core for all Android architectures..."
-	@mkdir -p $(BUILD_DIR)
-	GOOS=android GOARCH=arm64 $(GO) build -tags stdjson -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-android-arm64 ./$(CMD_DIR)
-	@echo "Building launcher for Android arm64..."
-	@$(MAKE) build-launcher-android-arm64
-	@echo "Staging JNI libs..."
-	@rm -rf $(BUILD_DIR)/android-staging
-	@mkdir -p $(BUILD_DIR)/android-staging/arm64-v8a
-	@cp $(BUILD_DIR)/$(BINARY_NAME)-android-arm64 $(BUILD_DIR)/android-staging/arm64-v8a/libpicoclaw.so
-	@cp $(BUILD_DIR)/picoclaw-launcher-android-arm64 $(BUILD_DIR)/android-staging/arm64-v8a/libpicoclaw-web.so
-	@cd $(BUILD_DIR)/android-staging && zip -r ../picoclaw-android-universal.zip .
-	@rm -rf $(BUILD_DIR)/android-staging
-	@echo "All Android builds complete: $(BUILD_DIR)/picoclaw-android-universal.zip"
-
 ## build-pi-zero: Build for Raspberry Pi Zero 2 W (32-bit and 64-bit)
 build-pi-zero: build-linux-arm build-linux-arm64
 	@echo "Pi Zero 2 W builds: $(BUILD_DIR)/$(BINARY_NAME)-linux-arm (32-bit), $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 (64-bit)"
@@ -257,7 +209,6 @@ build-all: generate
 	GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
 	GOOS=netbsd GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-netbsd-amd64 ./$(CMD_DIR)
 	GOOS=netbsd GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-netbsd-arm64 ./$(CMD_DIR)
-	@$(MAKE) build-android-bundle
 	@echo "All builds complete"
 
 ## install: Install picoclaw to system and copy builtin skills
@@ -294,14 +245,11 @@ clean:
 
 ## vet: Run go vet for static analysis
 vet: generate
-	@packages="$$($(GO) list $(GOFLAGS) ./...)" && \
-		$(GO) vet $(GOFLAGS) $$(printf '%s\n' "$$packages" | grep -v '^github.com/sipeed/picoclaw/web/')
-	@cd web/backend && $(WEB_GO) vet ./...
+	@$(GO) vet $(GOFLAGS) ./...
 
 ## test: Test Go code
 test: generate
-	@$(GO) test $(GOFLAGS) $$($(GO) list $(GOFLAGS) ./... | grep -v github.com/sipeed/picoclaw/web/)
-	@cd web && make test
+	@$(GO) test $(GOFLAGS) ./...
 
 ## fmt: Format Go code
 fmt:
@@ -370,16 +318,6 @@ docker-clean:
 	docker compose -f docker/docker-compose.full.yml down -v
 	docker rmi picoclaw:latest picoclaw:full 2>/dev/null || true
 
-
-## build-macos-app: Build PicoClaw macOS .app bundle (no terminal window)
-build-macos-app:build-launcher
-	@echo "Building macOS .app bundle..."
-	@if [ "$(UNAME_S)" != "Darwin" ]; then \
-		echo "Error: This target is only available on macOS"; \
-		exit 1; \
-	fi
-	@./scripts/build-macos-app.sh $(PLATFORM)-$(ARCH)
-	@echo "macOS .app bundle created: $(BUILD_DIR)/PicoClaw.app"
 
 ## mem: Build membench, download LOCOMO data (if needed), run benchmark, and show results
 mem:

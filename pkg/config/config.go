@@ -53,6 +53,7 @@ type Config struct {
 	Runtime   RuntimeConfig   `json:"runtime"             yaml:"-"`
 	Isolation IsolationConfig `json:"isolation,omitempty" yaml:"-"`
 	Agents    AgentsConfig    `json:"agents"              yaml:"-"`
+	ModelList []*ModelConfig  `json:"model_list,omitempty" yaml:"model_list,omitempty"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"  yaml:"-"`
 	Session   SessionConfig   `json:"session,omitempty"   yaml:"-"`
 	Channels  ChannelsConfig  `json:"channels"            yaml:"channels"`
@@ -269,6 +270,7 @@ type AgentDefaults struct {
 	Workspace                 string             `json:"workspace"                        env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
 	RestrictToWorkspace       bool               `json:"restrict_to_workspace"            env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
 	AllowReadOutsideWorkspace bool               `json:"allow_read_outside_workspace"     env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
+	Provider                  string             `json:"provider,omitempty"              env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
 	ModelName                 string             `json:"model_name,omitempty"             env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
 	ModelFallbacks            []string           `json:"model_fallbacks,omitempty"`
 	ImageModel                string             `json:"image_model,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
@@ -715,6 +717,40 @@ func (c *ModelConfig) SetAPIKey(value string) {
 	} else {
 		c.APIKeys = append(c.APIKeys, NewSecureString(value))
 	}
+}
+
+func (c *Config) GetModelConfig(name string) (*ModelConfig, error) {
+	if c == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+
+	needle := strings.TrimSpace(name)
+	if needle == "" {
+		return nil, fmt.Errorf("model name is required")
+	}
+
+	for _, mc := range c.ModelList {
+		if mc == nil {
+			continue
+		}
+		if mc.ModelName == needle || mc.Model == needle {
+			return mc, nil
+		}
+	}
+
+	return nil, fmt.Errorf("model %q not found", needle)
+}
+
+func (c *Config) ValidateModelList() error {
+	for _, mc := range c.ModelList {
+		if mc == nil {
+			continue
+		}
+		if err := mc.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ToolDiscoveryConfig struct {

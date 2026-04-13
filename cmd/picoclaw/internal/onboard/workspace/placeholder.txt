@@ -1,1 +1,0 @@
-Placeholder file so go:embed workspace resolves during cmd/picoclaw builds.
