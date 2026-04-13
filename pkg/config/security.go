@@ -23,16 +23,22 @@ const (
 	SecurityConfigFile = ".security.yml"
 )
 
+// SecurityConfig is the separate on-disk contract for non-model secrets.
+type SecurityConfig struct {
+	Channels ChannelsConfig `yaml:"channels,omitempty"`
+	Tools    ToolsConfig    `yaml:",inline"`
+}
+
 // securityPath returns the path to security.yml relative to the config file
 func securityPath(configPath string) string {
 	configDir := filepath.Dir(configPath)
 	return filepath.Join(configDir, SecurityConfigFile)
 }
 
-// loadSecurityConfig loads the security configuration from security.yml
-// Returns an empty SecurityConfig if the file doesn't exist
-func loadSecurityConfig(cfg *Config, securityPath string) error {
-	if cfg == nil {
+// loadSecurityConfig loads the security configuration from security.yml.
+// Returns an empty SecurityConfig if the file doesn't exist.
+func loadSecurityConfig(sec *SecurityConfig, securityPath string) error {
+	if sec == nil {
 		return fmt.Errorf("config is nil")
 	}
 	data, err := os.ReadFile(securityPath)
@@ -43,7 +49,11 @@ func loadSecurityConfig(cfg *Config, securityPath string) error {
 		return fmt.Errorf("failed to read security config: %w", err)
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err := rejectLegacySecurityConfigData(data); err != nil {
+		return err
+	}
+
+	if err := yaml.Unmarshal(data, sec); err != nil {
 		return fmt.Errorf("failed to parse security config: %w", err)
 	}
 
@@ -51,7 +61,7 @@ func loadSecurityConfig(cfg *Config, securityPath string) error {
 }
 
 // saveSecurityConfig saves the security configuration to security.yml
-func saveSecurityConfig(securityPath string, sec *Config) error {
+func saveSecurityConfig(securityPath string, sec *SecurityConfig) error {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -60,6 +70,27 @@ func saveSecurityConfig(securityPath string, sec *Config) error {
 		return fmt.Errorf("failed to marshal security config: %w", err)
 	}
 	return fileutil.WriteFileAtomic(securityPath, buf.Bytes(), 0o600)
+}
+
+func rejectLegacySecurityConfigData(data []byte) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("failed to parse security config: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return nil
+	}
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		switch doc.Content[i].Value {
+		case "model_list", "providers":
+			return fmt.Errorf("legacy model/provider config is no longer supported")
+		}
+	}
+	return nil
 }
 
 // SensitiveDataCache caches the strings.Replacer for filtering sensitive data.

@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"gopkg.in/yaml.v3"
 
 	"github.com/sipeed/picoclaw/pkg"
 	"github.com/sipeed/picoclaw/pkg/fileutil"
@@ -24,15 +24,38 @@ var rrCounter atomic.Uint64
 // CurrentVersion is the latest config schema version
 const CurrentVersion = 2
 
+type RuntimeConfig struct {
+	Codex    CodexRuntimeConfig    `json:"codex" yaml:"codex"`
+	Fallback RuntimeFallbackConfig `json:"fallback,omitempty" yaml:"fallback,omitempty"`
+}
+
+type CodexRuntimeConfig struct {
+	DefaultModel                string   `json:"default_model" yaml:"default_model"`
+	DefaultThinking             string   `json:"default_thinking,omitempty" yaml:"default_thinking,omitempty"`
+	Fast                        bool     `json:"fast,omitempty" yaml:"fast,omitempty"`
+	AutoCompactThresholdPercent int      `json:"auto_compact_threshold_percent,omitempty" yaml:"auto_compact_threshold_percent,omitempty"`
+	DiscoveryFallbackModels     []string `json:"discovery_fallback_models,omitempty" yaml:"discovery_fallback_models,omitempty"`
+}
+
+type RuntimeFallbackConfig struct {
+	DeepSeek DeepSeekFallbackConfig `json:"deepseek,omitempty" yaml:"deepseek,omitempty"`
+}
+
+type DeepSeekFallbackConfig struct {
+	Enabled bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Model   string `json:"model,omitempty" yaml:"model,omitempty"`
+	APIBase string `json:"api_base,omitempty" yaml:"api_base,omitempty"`
+}
+
 // Config is the current config structure with version support.
 type Config struct {
 	Version   int             `json:"version"             yaml:"-"` // Config schema version for migration
+	Runtime   RuntimeConfig   `json:"runtime"             yaml:"-"`
 	Isolation IsolationConfig `json:"isolation,omitempty" yaml:"-"`
 	Agents    AgentsConfig    `json:"agents"              yaml:"-"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"  yaml:"-"`
 	Session   SessionConfig   `json:"session,omitempty"   yaml:"-"`
 	Channels  ChannelsConfig  `json:"channels"            yaml:"channels"`
-	ModelList SecureModelList `json:"model_list"          yaml:"model_list"` // New model-centric provider configuration
 	Gateway   GatewayConfig   `json:"gateway"             yaml:"-"`
 	Hooks     HooksConfig     `json:"hooks,omitempty"     yaml:"-"`
 	Tools     ToolsConfig     `json:"tools"               yaml:",inline"`
@@ -116,7 +139,7 @@ type BuildInfo struct {
 }
 
 // MarshalJSON implements custom JSON marshaling for Config
-// to omit providers section when empty and session when empty
+// to omit session when empty.
 func (c *Config) MarshalJSON() ([]byte, error) {
 	type Alias Config
 	aux := &struct {
@@ -224,7 +247,7 @@ type SessionConfig struct {
 // requiring any keyword matching — all scoring is language-agnostic.
 type RoutingConfig struct {
 	Enabled    bool    `json:"enabled"`
-	LightModel string  `json:"light_model"` // model_name from model_list to use for simple tasks
+	LightModel string  `json:"light_model"` // default model alias to use for simple tasks
 	Threshold  float64 `json:"threshold"`   // complexity score in [0,1]; score >= threshold → primary model
 }
 
@@ -246,8 +269,7 @@ type AgentDefaults struct {
 	Workspace                 string             `json:"workspace"                        env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
 	RestrictToWorkspace       bool               `json:"restrict_to_workspace"            env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
 	AllowReadOutsideWorkspace bool               `json:"allow_read_outside_workspace"     env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
-	Provider                  string             `json:"provider"                         env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
-	ModelName                 string             `json:"model_name"                       env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
+	ModelName                 string             `json:"model_name,omitempty"             env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
 	ModelFallbacks            []string           `json:"model_fallbacks,omitempty"`
 	ImageModel                string             `json:"image_model,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
 	ImageModelFallbacks       []string           `json:"image_model_fallbacks,omitempty"`
@@ -289,31 +311,17 @@ func (d *AgentDefaults) IsToolFeedbackEnabled() bool {
 	return d.ToolFeedback.Enabled
 }
 
-// GetModelName returns the effective model name for the agent defaults.
-// It prefers the new "model_name" field but falls back to "model" for backward compatibility.
+// GetModelName returns the configured default agent model name.
 func (d *AgentDefaults) GetModelName() string {
-	return d.ModelName
+	if d == nil {
+		return ""
+	}
+	return strings.TrimSpace(d.ModelName)
 }
 
 type ChannelsConfig struct {
-	WhatsApp     WhatsAppConfig     `json:"whatsapp"      yaml:"-"`
-	Telegram     TelegramConfig     `json:"telegram"      yaml:"telegram,omitempty"`
-	Feishu       FeishuConfig       `json:"feishu"        yaml:"feishu,omitempty"`
-	Discord      DiscordConfig      `json:"discord"       yaml:"discord,omitempty"`
-	MaixCam      MaixCamConfig      `json:"maixcam"       yaml:"-"`
-	QQ           QQConfig           `json:"qq"            yaml:"qq,omitempty"`
-	DingTalk     DingTalkConfig     `json:"dingtalk"      yaml:"dingtalk,omitempty"`
-	Slack        SlackConfig        `json:"slack"         yaml:"slack,omitempty"`
-	Matrix       MatrixConfig       `json:"matrix"        yaml:"matrix,omitempty"`
-	LINE         LINEConfig         `json:"line"          yaml:"line,omitempty"`
-	OneBot       OneBotConfig       `json:"onebot"        yaml:"onebot,omitempty"`
-	WeCom        WeComConfig        `json:"wecom"         yaml:"wecom,omitempty"         envPrefix:"PICOCLAW_CHANNELS_WECOM_"`
-	Weixin       WeixinConfig       `json:"weixin"        yaml:"weixin,omitempty"`
-	Pico         PicoConfig         `json:"pico"          yaml:"pico,omitempty"`
-	PicoClient   PicoClientConfig   `json:"pico_client"   yaml:"pico_client,omitempty"`
-	IRC          IRCConfig          `json:"irc"           yaml:"irc,omitempty"`
-	VK           VKConfig           `json:"vk"            yaml:"vk,omitempty"`
-	TeamsWebhook TeamsWebhookConfig `json:"teams_webhook" yaml:"teams_webhook,omitempty"`
+	Telegram TelegramConfig `json:"telegram" yaml:"telegram,omitempty"`
+	Discord  DiscordConfig  `json:"discord"  yaml:"discord,omitempty"`
 }
 
 // GroupTriggerConfig controls when the bot responds in group chats.
@@ -351,15 +359,6 @@ type StreamingConfig struct {
 	MinGrowthChars  int  `json:"min_growth_chars,omitempty" env:"PICOCLAW_CHANNELS_TELEGRAM_STREAMING_MIN_GROWTH_CHARS"`
 }
 
-type WhatsAppConfig struct {
-	Enabled            bool                `json:"enabled"              yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_ENABLED"`
-	BridgeURL          string              `json:"bridge_url"           yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_BRIDGE_URL"`
-	UseNative          bool                `json:"use_native"           yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_USE_NATIVE"`
-	SessionStorePath   string              `json:"session_store_path"   yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_SESSION_STORE_PATH"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"           yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_ALLOW_FROM"`
-	ReasoningChannelID string              `json:"reasoning_channel_id" yaml:"-" env:"PICOCLAW_CHANNELS_WHATSAPP_REASONING_CHANNEL_ID"`
-}
-
 type TelegramConfig struct {
 	Enabled            bool                `json:"enabled"                 yaml:"-"               env:"PICOCLAW_CHANNELS_TELEGRAM_ENABLED"`
 	Token              SecureString        `json:"token,omitzero"          yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_TELEGRAM_TOKEN"`
@@ -378,20 +377,6 @@ func (c *TelegramConfig) SetToken(token string) {
 	c.Token = *NewSecureString(token)
 }
 
-type FeishuConfig struct {
-	Enabled             bool                `json:"enabled"                     yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_ENABLED"`
-	AppID               string              `json:"app_id"                      yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_APP_ID"`
-	AppSecret           SecureString        `json:"app_secret,omitzero"         yaml:"app_secret,omitempty"         env:"PICOCLAW_CHANNELS_FEISHU_APP_SECRET"`
-	EncryptKey          SecureString        `json:"encrypt_key,omitzero"        yaml:"encrypt_key,omitempty"        env:"PICOCLAW_CHANNELS_FEISHU_ENCRYPT_KEY"`
-	VerificationToken   SecureString        `json:"verification_token,omitzero" yaml:"verification_token,omitempty" env:"PICOCLAW_CHANNELS_FEISHU_VERIFICATION_TOKEN"`
-	AllowFrom           FlexibleStringSlice `json:"allow_from"                  yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_ALLOW_FROM"`
-	GroupTrigger        GroupTriggerConfig  `json:"group_trigger,omitempty"     yaml:"-"`
-	Placeholder         PlaceholderConfig   `json:"placeholder,omitempty"       yaml:"-"`
-	ReasoningChannelID  string              `json:"reasoning_channel_id"        yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_REASONING_CHANNEL_ID"`
-	RandomReactionEmoji FlexibleStringSlice `json:"random_reaction_emoji"       yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_RANDOM_REACTION_EMOJI"`
-	IsLark              bool                `json:"is_lark"                     yaml:"-"                            env:"PICOCLAW_CHANNELS_FEISHU_IS_LARK"`
-}
-
 type DiscordConfig struct {
 	Enabled            bool                `json:"enabled"                 yaml:"-"               env:"PICOCLAW_CHANNELS_DISCORD_ENABLED"`
 	Token              SecureString        `json:"token,omitzero"          yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_DISCORD_TOKEN"`
@@ -402,198 +387,6 @@ type DiscordConfig struct {
 	Typing             TypingConfig        `json:"typing,omitempty"        yaml:"-"`
 	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"   yaml:"-"`
 	ReasoningChannelID string              `json:"reasoning_channel_id"    yaml:"-"               env:"PICOCLAW_CHANNELS_DISCORD_REASONING_CHANNEL_ID"`
-}
-
-type MaixCamConfig struct {
-	Enabled            bool                `json:"enabled"              env:"PICOCLAW_CHANNELS_MAIXCAM_ENABLED"`
-	Host               string              `json:"host"                 env:"PICOCLAW_CHANNELS_MAIXCAM_HOST"`
-	Port               int                 `json:"port"                 env:"PICOCLAW_CHANNELS_MAIXCAM_PORT"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"           env:"PICOCLAW_CHANNELS_MAIXCAM_ALLOW_FROM"`
-	ReasoningChannelID string              `json:"reasoning_channel_id" env:"PICOCLAW_CHANNELS_MAIXCAM_REASONING_CHANNEL_ID"`
-}
-
-type QQConfig struct {
-	Enabled              bool                `json:"enabled"                  yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_ENABLED"`
-	AppID                string              `json:"app_id"                   yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_APP_ID"`
-	AppSecret            SecureString        `json:"app_secret,omitzero"      yaml:"app_secret,omitempty" env:"PICOCLAW_CHANNELS_QQ_APP_SECRET"`
-	AllowFrom            FlexibleStringSlice `json:"allow_from"               yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_ALLOW_FROM"`
-	GroupTrigger         GroupTriggerConfig  `json:"group_trigger,omitempty"  yaml:"-"`
-	MaxMessageLength     int                 `json:"max_message_length"       yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_MAX_MESSAGE_LENGTH"`
-	MaxBase64FileSizeMiB int64               `json:"max_base64_file_size_mib" yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_MAX_BASE64_FILE_SIZE_MIB"`
-	SendMarkdown         bool                `json:"send_markdown"            yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_SEND_MARKDOWN"`
-	ReasoningChannelID   string              `json:"reasoning_channel_id"     yaml:"-"                    env:"PICOCLAW_CHANNELS_QQ_REASONING_CHANNEL_ID"`
-}
-
-type DingTalkConfig struct {
-	Enabled            bool                `json:"enabled"                 yaml:"-"                       env:"PICOCLAW_CHANNELS_DINGTALK_ENABLED"`
-	ClientID           string              `json:"client_id"               yaml:"-"                       env:"PICOCLAW_CHANNELS_DINGTALK_CLIENT_ID"`
-	ClientSecret       SecureString        `json:"client_secret,omitzero"  yaml:"client_secret,omitempty" env:"PICOCLAW_CHANNELS_DINGTALK_CLIENT_SECRET"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"              yaml:"-"                       env:"PICOCLAW_CHANNELS_DINGTALK_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty" yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"    yaml:"-"                       env:"PICOCLAW_CHANNELS_DINGTALK_REASONING_CHANNEL_ID"`
-}
-
-type SlackConfig struct {
-	Enabled            bool                `json:"enabled"                 yaml:"-"                   env:"PICOCLAW_CHANNELS_SLACK_ENABLED"`
-	BotToken           SecureString        `json:"bot_token,omitzero"      yaml:"bot_token,omitempty" env:"PICOCLAW_CHANNELS_SLACK_BOT_TOKEN"`
-	AppToken           SecureString        `json:"app_token,omitzero"      yaml:"app_token,omitempty" env:"PICOCLAW_CHANNELS_SLACK_APP_TOKEN"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"              yaml:"-"                   env:"PICOCLAW_CHANNELS_SLACK_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty" yaml:"-"`
-	Typing             TypingConfig        `json:"typing,omitempty"        yaml:"-"`
-	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"   yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"    yaml:"-"                   env:"PICOCLAW_CHANNELS_SLACK_REASONING_CHANNEL_ID"`
-}
-
-type MatrixConfig struct {
-	Enabled            bool                `json:"enabled"                        yaml:"-"                      env:"PICOCLAW_CHANNELS_MATRIX_ENABLED"`
-	Homeserver         string              `json:"homeserver"                     yaml:"-"                      env:"PICOCLAW_CHANNELS_MATRIX_HOMESERVER"`
-	UserID             string              `json:"user_id"                        yaml:"-"                      env:"PICOCLAW_CHANNELS_MATRIX_USER_ID"`
-	AccessToken        SecureString        `json:"access_token,omitzero"          yaml:"access_token,omitempty" env:"PICOCLAW_CHANNELS_MATRIX_ACCESS_TOKEN"`
-	DeviceID           string              `json:"device_id,omitempty"            yaml:"-"`
-	JoinOnInvite       bool                `json:"join_on_invite"                 yaml:"-"`
-	MessageFormat      string              `json:"message_format,omitempty"       yaml:"-"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"                     yaml:"-"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty"        yaml:"-"`
-	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"          yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"           yaml:"-"`
-	CryptoDatabasePath string              `json:"crypto_database_path,omitempty" yaml:"-"`
-	CryptoPassphrase   string              `json:"crypto_passphrase,omitempty"    yaml:"-"`
-}
-
-type LINEConfig struct {
-	Enabled            bool                `json:"enabled"                       yaml:"-"                              env:"PICOCLAW_CHANNELS_LINE_ENABLED"`
-	ChannelSecret      SecureString        `json:"channel_secret,omitzero"       yaml:"channel_secret,omitempty"       env:"PICOCLAW_CHANNELS_LINE_CHANNEL_SECRET"`
-	ChannelAccessToken SecureString        `json:"channel_access_token,omitzero" yaml:"channel_access_token,omitempty" env:"PICOCLAW_CHANNELS_LINE_CHANNEL_ACCESS_TOKEN"`
-	WebhookHost        string              `json:"webhook_host"                  yaml:"-"                              env:"PICOCLAW_CHANNELS_LINE_WEBHOOK_HOST"`
-	WebhookPort        int                 `json:"webhook_port"                  yaml:"-"                              env:"PICOCLAW_CHANNELS_LINE_WEBHOOK_PORT"`
-	WebhookPath        string              `json:"webhook_path"                  yaml:"-"                              env:"PICOCLAW_CHANNELS_LINE_WEBHOOK_PATH"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"                    yaml:"-"                              env:"PICOCLAW_CHANNELS_LINE_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty"       yaml:"-"`
-	Typing             TypingConfig        `json:"typing,omitempty"              yaml:"-"`
-	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"         yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"          yaml:"-"`
-}
-
-type OneBotConfig struct {
-	Enabled            bool                `json:"enabled"                 yaml:"-"                      env:"PICOCLAW_CHANNELS_ONEBOT_ENABLED"`
-	WSUrl              string              `json:"ws_url"                  yaml:"-"                      env:"PICOCLAW_CHANNELS_ONEBOT_WS_URL"`
-	AccessToken        SecureString        `json:"access_token,omitzero"   yaml:"access_token,omitempty" env:"PICOCLAW_CHANNELS_ONEBOT_ACCESS_TOKEN"`
-	ReconnectInterval  int                 `json:"reconnect_interval"      yaml:"-"                      env:"PICOCLAW_CHANNELS_ONEBOT_RECONNECT_INTERVAL"`
-	GroupTriggerPrefix []string            `json:"group_trigger_prefix"    yaml:"-"                      env:"PICOCLAW_CHANNELS_ONEBOT_GROUP_TRIGGER_PREFIX"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"              yaml:"-"                      env:"PICOCLAW_CHANNELS_ONEBOT_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty" yaml:"-"`
-	Typing             TypingConfig        `json:"typing,omitempty"        yaml:"-"`
-	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"   yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"    yaml:"-"`
-}
-
-type WeComGroupConfig struct {
-	AllowFrom FlexibleStringSlice `json:"allow_from,omitempty"`
-}
-
-type WeComConfig struct {
-	Enabled             bool                `json:"enabled"                 yaml:"-"                env:"ENABLED"`
-	BotID               string              `json:"bot_id"                  yaml:"-"                env:"BOT_ID"`
-	Secret              SecureString        `json:"secret,omitzero"         yaml:"secret,omitempty" env:"SECRET"`
-	WebSocketURL        string              `json:"websocket_url,omitempty" yaml:"-"                env:"WEBSOCKET_URL"`
-	SendThinkingMessage bool                `json:"send_thinking_message"   yaml:"-"                env:"SEND_THINKING_MESSAGE"`
-	AllowFrom           FlexibleStringSlice `json:"allow_from"              yaml:"-"                env:"ALLOW_FROM"`
-	ReasoningChannelID  string              `json:"reasoning_channel_id"    yaml:"-"                env:"REASONING_CHANNEL_ID"`
-}
-
-func (c *WeComConfig) SetSecret(secret string) {
-	c.Secret = *NewSecureString(secret)
-}
-
-type WeixinConfig struct {
-	Enabled            bool                `json:"enabled"              yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_ENABLED"`
-	Token              SecureString        `json:"token,omitzero"       yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_WEIXIN_TOKEN"`
-	AccountID          string              `json:"account_id,omitempty" yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_ACCOUNT_ID"`
-	BaseURL            string              `json:"base_url"             yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_BASE_URL"`
-	CDNBaseURL         string              `json:"cdn_base_url"         yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_CDN_BASE_URL"`
-	Proxy              string              `json:"proxy"                yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_PROXY"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"           yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_ALLOW_FROM"`
-	ReasoningChannelID string              `json:"reasoning_channel_id" yaml:"-"               env:"PICOCLAW_CHANNELS_WEIXIN_REASONING_CHANNEL_ID"`
-}
-
-// SetToken sets the Weixin token and marks it as dirty for security saving
-func (c *WeixinConfig) SetToken(token string) {
-	c.Token = *NewSecureString(token)
-}
-
-type PicoConfig struct {
-	Enabled         bool                `json:"enabled"                     yaml:"-"               env:"PICOCLAW_CHANNELS_PICO_ENABLED"`
-	Token           SecureString        `json:"token,omitzero"              yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_PICO_TOKEN"`
-	AllowTokenQuery bool                `json:"allow_token_query,omitempty" yaml:"-"`
-	AllowOrigins    []string            `json:"allow_origins,omitempty"     yaml:"-"`
-	PingInterval    int                 `json:"ping_interval,omitempty"     yaml:"-"`
-	ReadTimeout     int                 `json:"read_timeout,omitempty"      yaml:"-"`
-	WriteTimeout    int                 `json:"write_timeout,omitempty"     yaml:"-"`
-	MaxConnections  int                 `json:"max_connections,omitempty"   yaml:"-"`
-	AllowFrom       FlexibleStringSlice `json:"allow_from"                  yaml:"-"               env:"PICOCLAW_CHANNELS_PICO_ALLOW_FROM"`
-	Placeholder     PlaceholderConfig   `json:"placeholder,omitempty"       yaml:"-"`
-}
-
-// SetToken sets the Pico token and marks it as dirty for security saving
-func (c *PicoConfig) SetToken(token string) {
-	c.Token = *NewSecureString(token)
-}
-
-type PicoClientConfig struct {
-	Enabled      bool                `json:"enabled"                 yaml:"-"               env:"PICOCLAW_CHANNELS_PICO_CLIENT_ENABLED"`
-	URL          string              `json:"url"                     yaml:"-"               env:"PICOCLAW_CHANNELS_PICO_CLIENT_URL"`
-	Token        SecureString        `json:"token,omitzero"          yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_PICO_CLIENT_TOKEN"`
-	SessionID    string              `json:"session_id,omitempty"    yaml:"-"`
-	PingInterval int                 `json:"ping_interval,omitempty" yaml:"-"`
-	ReadTimeout  int                 `json:"read_timeout,omitempty"  yaml:"-"`
-	AllowFrom    FlexibleStringSlice `json:"allow_from"              yaml:"-"               env:"PICOCLAW_CHANNELS_PICO_CLIENT_ALLOW_FROM"`
-}
-
-type IRCConfig struct {
-	Enabled            bool                `json:"enabled"                    yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_ENABLED"`
-	Server             string              `json:"server"                     yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_SERVER"`
-	TLS                bool                `json:"tls"                        yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_TLS"`
-	Nick               string              `json:"nick"                       yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_NICK"`
-	User               string              `json:"user,omitempty"             yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_USER"`
-	RealName           string              `json:"real_name,omitempty"        yaml:"-"`
-	Password           SecureString        `json:"password,omitzero"          yaml:"password,omitempty"          env:"PICOCLAW_CHANNELS_IRC_PASSWORD"`
-	NickServPassword   SecureString        `json:"nickserv_password,omitzero" yaml:"nickserv_password,omitempty" env:"PICOCLAW_CHANNELS_IRC_NICKSERV_PASSWORD"`
-	SASLUser           string              `json:"sasl_user"                  yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_SASL_USER"`
-	SASLPassword       SecureString        `json:"sasl_password,omitzero"     yaml:"sasl_password,omitempty"     env:"PICOCLAW_CHANNELS_IRC_SASL_PASSWORD"`
-	Channels           FlexibleStringSlice `json:"channels"                   yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_CHANNELS"`
-	RequestCaps        FlexibleStringSlice `json:"request_caps,omitempty"     yaml:"-"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"                 yaml:"-"                           env:"PICOCLAW_CHANNELS_IRC_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty"    yaml:"-"`
-	Typing             TypingConfig        `json:"typing,omitempty"           yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"       yaml:"-"`
-}
-
-type VKConfig struct {
-	Enabled            bool                `json:"enabled"                 yaml:"-"               env:"PICOCLAW_CHANNELS_VK_ENABLED"`
-	Token              SecureString        `json:"token,omitzero"          yaml:"token,omitempty" env:"PICOCLAW_CHANNELS_VK_TOKEN"`
-	GroupID            int                 `json:"group_id"                yaml:"-"               env:"PICOCLAW_CHANNELS_VK_GROUP_ID"`
-	AllowFrom          FlexibleStringSlice `json:"allow_from"              yaml:"-"               env:"PICOCLAW_CHANNELS_VK_ALLOW_FROM"`
-	GroupTrigger       GroupTriggerConfig  `json:"group_trigger,omitempty" yaml:"-"`
-	Typing             TypingConfig        `json:"typing,omitempty"        yaml:"-"`
-	Placeholder        PlaceholderConfig   `json:"placeholder,omitempty"   yaml:"-"`
-	ReasoningChannelID string              `json:"reasoning_channel_id"    yaml:"-"               env:"PICOCLAW_CHANNELS_VK_REASONING_CHANNEL_ID"`
-}
-
-func (c *VKConfig) SetToken(token string) {
-	c.Token = *NewSecureString(token)
-}
-
-// TeamsWebhookConfig configures the output-only Microsoft Teams webhook channel.
-// Multiple webhook targets can be configured and selected via ChatID at send time.
-type TeamsWebhookConfig struct {
-	Enabled  bool                          `json:"enabled"  yaml:"-"                  env:"PICOCLAW_CHANNELS_TEAMS_WEBHOOK_ENABLED"`
-	Webhooks map[string]TeamsWebhookTarget `json:"webhooks" yaml:"webhooks,omitempty"`
-}
-
-// TeamsWebhookTarget represents a single Teams webhook destination.
-type TeamsWebhookTarget struct {
-	WebhookURL SecureString `json:"webhook_url,omitzero" yaml:"webhook_url,omitempty"`
-	Title      string       `json:"title,omitempty"      yaml:"-"`
 }
 
 type HeartbeatConfig struct {
@@ -625,9 +418,10 @@ type ModelConfig struct {
 	Model     string `json:"model"`      // Protocol/model-identifier (e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4.6")
 
 	// HTTP-based providers
-	APIBase   string   `json:"api_base,omitempty"`  // API endpoint URL
-	Proxy     string   `json:"proxy,omitempty"`     // HTTP proxy URL
-	Fallbacks []string `json:"fallbacks,omitempty"` // Fallback model names for failover
+	APIKeyValue SecureString `json:"api_key,omitzero" yaml:"api_key,omitempty"` // Single API key
+	APIBase     string       `json:"api_base,omitempty"`                        // API endpoint URL
+	Proxy       string       `json:"proxy,omitempty"`                           // HTTP proxy URL
+	Fallbacks   []string     `json:"fallbacks,omitempty"`                       // Fallback model names for failover
 
 	// Special providers (CLI-based, OAuth, etc.)
 	AuthMethod  string `json:"auth_method,omitempty"`  // Authentication method: oauth, token
@@ -661,6 +455,9 @@ func (c *ModelConfig) APIKey() string {
 	if len(c.APIKeys) > 0 {
 		return c.APIKeys[0].String()
 	}
+	if key := c.APIKeyValue.String(); key != "" {
+		return key
+	}
 	return ""
 }
 
@@ -681,6 +478,7 @@ func (c *ModelConfig) Validate() error {
 }
 
 func (c *ModelConfig) SetAPIKey(value string) {
+	c.APIKeyValue.Set(value)
 	if len(c.APIKeys) > 0 {
 		c.APIKeys[0].Set(value)
 	} else {
@@ -1007,123 +805,21 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// First, try to detect config version by reading the version field
-	var versionInfo struct {
-		Version int `json:"version"`
-	}
-	if e := json.Unmarshal(data, &versionInfo); e != nil {
-		return nil, fmt.Errorf("failed to detect config version: %w", e)
-	}
 	if len(data) <= 10 {
 		logger.Warn(fmt.Sprintf("content is [%s]", string(data)))
 		return DefaultConfig(), nil
 	}
 
-	// Load config based on detected version
-	var cfg *Config
-	switch versionInfo.Version {
-	case 0:
-		logger.InfoF(
-			"config migrate start",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		// Legacy config (no version field)
-		v, e := loadConfigV0(data)
-		if e != nil {
-			return nil, e
-		}
-		cfg, e = v.Migrate()
-		if e != nil {
-			logger.ErrorF(
-				"config migrate fail",
-				map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-			)
-			return nil, e
-		}
-		logger.InfoF(
-			"config migrate success",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		err = makeBackup(path)
-		if err != nil {
-			return nil, err
-		}
-		// Load existing security config and merge with migrated one to prevent data loss
-		secErr := loadSecurityConfig(cfg, securityPath(path))
-		if secErr != nil && !os.IsNotExist(secErr) {
-			logger.WarnF(
-				"failed to load existing security config during migration",
-				map[string]any{"error": secErr},
-			)
-			return nil, fmt.Errorf("failed to load existing security config: %w", secErr)
-		}
-		defer func(cfg *Config) {
-			_ = SaveConfig(path, cfg)
-		}(cfg)
-	case 1:
-		// V1→V2 migration: infer Enabled and migrate channel config fields
-		logger.InfoF(
-			"config migrate start",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		cfg, err = loadConfig(data)
-		if err != nil {
-			return nil, err
-		}
-		secPath := securityPath(path)
-		err = loadSecurityConfig(cfg, secPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load security config: %w", err)
-		}
-
-		oldCfg := &configV1{Config: *cfg}
-		cfg, err = oldCfg.Migrate()
-		if err != nil {
-			logger.ErrorF(
-				"config migrate fail",
-				map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-			)
-			return nil, err
-		}
-
-		err = makeBackup(path)
-		if err != nil {
-			return nil, err
-		}
-
-		defer func(cfg *Config) {
-			_ = SaveConfig(path, cfg)
-		}(cfg)
-		logger.InfoF(
-			"config migrate success",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-	case CurrentVersion:
-		// Current version
-		cfg, err = loadConfig(data)
-		if err != nil {
-			return nil, err
-		}
-		// Load security configuration
-		secPath := securityPath(path)
-		err = loadSecurityConfig(cfg, secPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load security config: %w", err)
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported config version: %d", versionInfo.Version)
-	}
-
-	if err = env.Parse(cfg); err != nil {
+	cfg, err := loadConfig(data)
+	if err != nil {
 		return nil, err
 	}
 
-	// Expand multi-key configs into separate entries for key-level failover
-	cfg.ModelList = expandMultiKeyModels(cfg.ModelList)
+	if err := cfg.SecurityCopyFrom(path); err != nil {
+		return nil, fmt.Errorf("failed to load security config: %w", err)
+	}
 
-	// Validate model_list for uniqueness and required fields
-	if err = cfg.ValidateModelList(); err != nil {
+	if err = env.Parse(cfg); err != nil {
 		return nil, err
 	}
 
@@ -1134,6 +830,41 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func loadConfig(data []byte) (*Config, error) {
+	cfg := DefaultConfig()
+
+	if err := rejectLegacyConfigData(data); err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func rejectLegacyConfigData(data []byte) error {
+	var probe struct {
+		ModelList json.RawMessage `json:"model_list"`
+		Providers json.RawMessage `json:"providers"`
+		Agents    struct {
+			Defaults struct {
+				Provider  json.RawMessage `json:"provider"`
+				ModelName json.RawMessage `json:"model_name"`
+				Model     json.RawMessage `json:"model"`
+			} `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+	if len(probe.ModelList) > 0 || len(probe.Providers) > 0 || len(probe.Agents.Defaults.Provider) > 0 || len(probe.Agents.Defaults.ModelName) > 0 || len(probe.Agents.Defaults.Model) > 0 {
+		return fmt.Errorf("legacy model/provider config is no longer supported")
+	}
+	return nil
 }
 
 func makeBackup(path string) error {
@@ -1175,32 +906,23 @@ func SaveConfig(path string, cfg *Config) error {
 	if cfg.Version < CurrentVersion {
 		cfg.Version = CurrentVersion
 	}
-	// Filter out virtual models before serializing to config file
-	nonVirtualModels := make([]*ModelConfig, 0, len(cfg.ModelList))
-	for _, m := range cfg.ModelList {
-		if !m.isVirtual {
-			nonVirtualModels = append(nonVirtualModels, m)
-		}
-	}
-	// Temporarily replace ModelList with filtered version for serialization
-	originalModelList := cfg.ModelList
-	defer func() {
-		// Restore original ModelList after serialization
-		cfg.ModelList = originalModelList
-	}()
-	cfg.ModelList = nonVirtualModels
-
-	if err := saveSecurityConfig(securityPath(path), cfg); err != nil {
-		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
-		return err
-	}
-
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
+	sec := &SecurityConfig{
+		Channels: cfg.Channels,
+		Tools:    cfg.Tools,
+	}
+	if err := saveSecurityConfig(securityPath(path), sec); err != nil {
+		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
+		return err
+	}
 	logger.Infof("saving config to %s", path)
-	return fileutil.WriteFileAtomic(path, data, 0o600)
+	if err := fileutil.WriteFileAtomic(path, data, 0o600); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Config) WorkspacePath() string {
@@ -1221,131 +943,22 @@ func expandHome(path string) string {
 	return path
 }
 
-// GetModelConfig returns the ModelConfig for the given model name.
-// If multiple configs exist with the same model_name, it uses round-robin
-// selection for load balancing. Returns an error if the model is not found.
-func (c *Config) GetModelConfig(modelName string) (*ModelConfig, error) {
-	matches := c.findMatches(modelName)
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("model %q not found in model_list or providers", modelName)
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-
-	// Multiple configs - use round-robin for load balancing
-	idx := (rrCounter.Add(1) - 1) % uint64(len(matches))
-	return matches[idx], nil
-}
-
-// findMatches finds all ModelConfig entries with the given model_name.
-func (c *Config) findMatches(modelName string) []*ModelConfig {
-	var matches []*ModelConfig
-	for i := range c.ModelList {
-		if c.ModelList[i].ModelName == modelName {
-			matches = append(matches, c.ModelList[i])
+func (c *Config) SecurityCopyFrom(path string) error {
+	secPath := securityPath(path)
+	data, err := os.ReadFile(secPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
 		}
+		return fmt.Errorf("failed to read security config: %w", err)
 	}
-	return matches
-}
-
-// ValidateModelList validates all ModelConfig entries in the model_list.
-// It checks that each model config is valid.
-// Note: Multiple entries with the same model_name are allowed for load balancing.
-func (c *Config) ValidateModelList() error {
-	for i := range c.ModelList {
-		if err := c.ModelList[i].Validate(); err != nil {
-			return fmt.Errorf("model_list[%d]: %w", i, err)
-		}
+	if err := rejectLegacySecurityConfigData(data); err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(data, c); err != nil {
+		return fmt.Errorf("failed to parse security config: %w", err)
 	}
 	return nil
-}
-
-func (c *Config) SecurityCopyFrom(path string) error {
-	return loadSecurityConfig(c, securityPath(path))
-}
-
-// expandMultiKeyModels expands ModelConfig entries with multiple API keys into
-// separate entries for key-level failover. Each key gets its own ModelConfig entry,
-// and the original entry's fallbacks are set up to chain through the expanded entries.
-//
-// Example: {"model_name": "gpt-4", "api_keys": ["k1", "k2", "k3"]}
-// Becomes:
-//   - {"model_name": "gpt-4", "api_keys": ["k1"], "fallbacks": ["gpt-4__key_1", "gpt-4__key_2"]}
-//   - {"model_name": "gpt-4__key_1", "api_keys": {"k2"}}
-//   - {"model_name": "gpt-4__key_2", "api_keys": {"k3"}}
-func expandMultiKeyModels(models []*ModelConfig) []*ModelConfig {
-	var expanded []*ModelConfig
-
-	for _, m := range models {
-		keys := m.APIKeys.Values()
-
-		// Single key or no keys: keep as-is
-		if len(keys) <= 1 {
-			expanded = append(expanded, m)
-			continue
-		}
-
-		// Multiple keys: expand
-		originalName := m.ModelName
-
-		// Create entries for additional keys (key_1, key_2, ...)
-		var fallbackNames []string
-		for i := 1; i < len(keys); i++ {
-			suffix := fmt.Sprintf("__key_%d", i)
-			expandedName := originalName + suffix
-
-			// Create a copy for the additional key
-			additionalEntry := &ModelConfig{
-				ModelName:      expandedName,
-				Model:          m.Model,
-				APIBase:        m.APIBase,
-				APIKeys:        SimpleSecureStrings(keys[i]),
-				Proxy:          m.Proxy,
-				AuthMethod:     m.AuthMethod,
-				ConnectMode:    m.ConnectMode,
-				Workspace:      m.Workspace,
-				RPM:            m.RPM,
-				MaxTokensField: m.MaxTokensField,
-				RequestTimeout: m.RequestTimeout,
-				ThinkingLevel:  m.ThinkingLevel,
-				ExtraBody:      m.ExtraBody,
-				CustomHeaders:  m.CustomHeaders,
-				isVirtual:      true,
-			}
-			expanded = append(expanded, additionalEntry)
-			fallbackNames = append(fallbackNames, expandedName)
-		}
-
-		// Create the primary entry with first key and fallbacks
-		primaryEntry := &ModelConfig{
-			ModelName:      originalName,
-			Model:          m.Model,
-			APIBase:        m.APIBase,
-			Proxy:          m.Proxy,
-			AuthMethod:     m.AuthMethod,
-			ConnectMode:    m.ConnectMode,
-			Workspace:      m.Workspace,
-			RPM:            m.RPM,
-			MaxTokensField: m.MaxTokensField,
-			RequestTimeout: m.RequestTimeout,
-			ThinkingLevel:  m.ThinkingLevel,
-			ExtraBody:      m.ExtraBody,
-			CustomHeaders:  m.CustomHeaders,
-			APIKeys:        SimpleSecureStrings(keys[0]),
-		}
-
-		// Prepend new fallbacks to existing ones
-		if len(fallbackNames) > 0 {
-			primaryEntry.Fallbacks = append(fallbackNames, m.Fallbacks...)
-		} else if len(m.Fallbacks) > 0 {
-			primaryEntry.Fallbacks = m.Fallbacks
-		}
-
-		expanded = append(expanded, primaryEntry)
-	}
-
-	return expanded
 }
 
 func (t *ToolsConfig) IsToolEnabled(name string) bool {
