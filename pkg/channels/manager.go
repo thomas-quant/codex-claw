@@ -61,11 +61,6 @@ type placeholderEntry struct {
 var channelRateConfig = map[string]float64{
 	"telegram": 20,
 	"discord":  1,
-	"slack":    1,
-	"matrix":   2,
-	"line":     10,
-	"qq":       5,
-	"irc":      2,
 }
 
 type channelWorker struct {
@@ -358,89 +353,8 @@ func (m *Manager) initChannels(channels *config.ChannelsConfig) error {
 		m.initChannel("telegram", "Telegram")
 	}
 
-	if channels.WhatsApp.Enabled {
-		waCfg := channels.WhatsApp
-		if waCfg.UseNative {
-			m.initChannel("whatsapp_native", "WhatsApp Native")
-		} else if waCfg.BridgeURL != "" {
-			m.initChannel("whatsapp", "WhatsApp")
-		}
-	}
-
-	if channels.Feishu.Enabled {
-		m.initChannel("feishu", "Feishu")
-	}
-
 	if channels.Discord.Enabled && channels.Discord.Token.String() != "" {
 		m.initChannel("discord", "Discord")
-	}
-
-	if channels.MaixCam.Enabled {
-		m.initChannel("maixcam", "MaixCam")
-	}
-
-	if channels.QQ.Enabled {
-		m.initChannel("qq", "QQ")
-	}
-
-	if channels.DingTalk.Enabled && channels.DingTalk.ClientID != "" {
-		m.initChannel("dingtalk", "DingTalk")
-	}
-
-	if channels.Slack.Enabled && channels.Slack.BotToken.String() != "" {
-		m.initChannel("slack", "Slack")
-	}
-
-	if channels.Matrix.Enabled &&
-		m.config.Channels.Matrix.Homeserver != "" &&
-		m.config.Channels.Matrix.UserID != "" &&
-		m.config.Channels.Matrix.AccessToken.String() != "" {
-		m.initChannel("matrix", "Matrix")
-	}
-
-	if channels.LINE.Enabled && channels.LINE.ChannelAccessToken.String() != "" {
-		m.initChannel("line", "LINE")
-	}
-
-	if channels.OneBot.Enabled && channels.OneBot.WSUrl != "" {
-		m.initChannel("onebot", "OneBot")
-	}
-
-	if channels.WeCom.Enabled && channels.WeCom.BotID != "" && channels.WeCom.Secret.String() != "" {
-		m.initChannel("wecom", "WeCom")
-	}
-
-	if channels.Weixin.Enabled && channels.Weixin.Token.String() != "" {
-		m.initChannel("weixin", "Weixin")
-	}
-
-	if channels.Pico.Enabled && channels.Pico.Token.String() != "" {
-		m.initChannel("pico", "Pico")
-	}
-
-	if channels.PicoClient.Enabled && channels.PicoClient.URL != "" {
-		m.initChannel("pico_client", "Pico Client")
-	}
-
-	if channels.IRC.Enabled && channels.IRC.Server != "" {
-		m.initChannel("irc", "IRC")
-	}
-
-	if channels.VK.Enabled && channels.VK.Token.String() != "" && channels.VK.GroupID != 0 {
-		m.initChannel("vk", "VK")
-	}
-
-	if channels.TeamsWebhook.Enabled && len(channels.TeamsWebhook.Webhooks) > 0 {
-		hasValidTarget := false
-		for _, target := range channels.TeamsWebhook.Webhooks {
-			if target.WebhookURL.String() != "" {
-				hasValidTarget = true
-				break
-			}
-		}
-		if hasValidTarget {
-			m.initChannel("teams_webhook", "Teams Webhook")
-		}
 	}
 
 	logger.InfoCF("channels", "Channel initialization completed", map[string]any{
