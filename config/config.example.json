@@ -3,7 +3,6 @@
     "defaults": {
       "workspace": "~/.picoclaw/workspace",
       "restrict_to_workspace": true,
-      "model_name": "gpt-5.4",
       "max_tokens": 8192,
       "context_window": 131072,
       "temperature": 0.7,
@@ -17,76 +16,22 @@
       }
     }
   },
-  "model_list": [
-    {
-      "model_name": "gpt-5.4",
-      "model": "openai/gpt-5.4",
-      "api_key": "sk-your-openai-key",
-      "api_base": "https://api.openai.com/v1"
+  "runtime": {
+    "codex": {
+      "default_model": "gpt-5.4",
+      "default_thinking": "medium",
+      "fast": false,
+      "auto_compact_threshold_percent": 30,
+      "discovery_fallback_models": ["gpt-5.4", "gpt-5.4-mini"]
     },
-    {
-      "model_name": "claude-sonnet-4.6",
-      "model": "anthropic/claude-sonnet-4.6",
-      "api_key": "sk-ant-your-key",
-      "api_base": "https://api.anthropic.com/v1",
-      "thinking_level": "high"
-    },
-    {
-      "_comment": "Anthropic Messages API - use native format for direct Anthropic API access",
-      "model_name": "claude-opus-4-6",
-      "model": "anthropic-messages/claude-opus-4-6",
-      "api_key": "sk-ant-your-key",
-      "api_base": "https://api.anthropic.com"
-    },
-    {
-      "model_name": "gemini",
-      "model": "antigravity/gemini-2.0-flash",
-      "auth_method": "oauth"
-    },
-    {
-      "model_name": "deepseek",
-      "model": "deepseek/deepseek-chat",
-      "api_key": "sk-your-deepseek-key"
-    },
-    {
-      "model_name": "venice-uncensored",
-      "model": "venice/venice-uncensored",
-      "api_key": "your-venice-api-key"
-    },
-    {
-      "model_name": "lmstudio-local",
-      "model": "lmstudio/openai/gpt-oss-20b"
-    },
-    {
-      "model_name": "longcat",
-      "model": "longcat/LongCat-Flash-Thinking",
-      "api_key": "your-longcat-api-key"
-    },
-    {
-      "model_name": "modelscope-qwen",
-      "model": "modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "api_key": "your-modelscope-access-token",
-      "api_base": "https://api-inference.modelscope.cn/v1"
-    },
-    {
-      "model_name": "azure-gpt5",
-      "model": "azure/my-gpt5-deployment",
-      "api_key": "your-azure-api-key",
-      "api_base": "https://your-resource.openai.azure.com"
-    },
-    {
-      "model_name": "loadbalanced-gpt-5.4",
-      "model": "openai/gpt-5.4",
-      "api_key": "sk-key1",
-      "api_base": "https://api1.example.com/v1"
-    },
-    {
-      "model_name": "loadbalanced-gpt-5.4",
-      "model": "openai/gpt-5.4",
-      "api_key": "sk-key2",
-      "api_base": "https://api2.example.com/v1"
+    "fallback": {
+      "deepseek": {
+        "enabled": true,
+        "model": "deepseek-chat",
+        "api_base": "https://api.deepseek.com/v1"
+      }
     }
-  ],
+  },
   "channels": {
     "telegram": {
       "enabled": false,

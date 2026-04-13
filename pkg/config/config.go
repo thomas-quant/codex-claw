@@ -24,9 +24,33 @@ var rrCounter atomic.Uint64
 // CurrentVersion is the latest config schema version
 const CurrentVersion = 2
 
+type RuntimeConfig struct {
+	Codex    CodexRuntimeConfig    `json:"codex" yaml:"codex"`
+	Fallback RuntimeFallbackConfig `json:"fallback,omitempty" yaml:"fallback,omitempty"`
+}
+
+type CodexRuntimeConfig struct {
+	DefaultModel                string   `json:"default_model" yaml:"default_model"`
+	DefaultThinking             string   `json:"default_thinking,omitempty" yaml:"default_thinking,omitempty"`
+	Fast                        bool     `json:"fast,omitempty" yaml:"fast,omitempty"`
+	AutoCompactThresholdPercent int      `json:"auto_compact_threshold_percent,omitempty" yaml:"auto_compact_threshold_percent,omitempty"`
+	DiscoveryFallbackModels     []string `json:"discovery_fallback_models,omitempty" yaml:"discovery_fallback_models,omitempty"`
+}
+
+type RuntimeFallbackConfig struct {
+	DeepSeek DeepSeekFallbackConfig `json:"deepseek,omitempty" yaml:"deepseek,omitempty"`
+}
+
+type DeepSeekFallbackConfig struct {
+	Enabled bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Model   string `json:"model,omitempty" yaml:"model,omitempty"`
+	APIBase string `json:"api_base,omitempty" yaml:"api_base,omitempty"`
+}
+
 // Config is the current config structure with version support.
 type Config struct {
 	Version   int             `json:"version"             yaml:"-"` // Config schema version for migration
+	Runtime   RuntimeConfig   `json:"runtime"             yaml:"-"`
 	Isolation IsolationConfig `json:"isolation,omitempty" yaml:"-"`
 	Agents    AgentsConfig    `json:"agents"              yaml:"-"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"  yaml:"-"`
@@ -625,9 +649,10 @@ type ModelConfig struct {
 	Model     string `json:"model"`      // Protocol/model-identifier (e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4.6")
 
 	// HTTP-based providers
-	APIBase   string   `json:"api_base,omitempty"`  // API endpoint URL
-	Proxy     string   `json:"proxy,omitempty"`     // HTTP proxy URL
-	Fallbacks []string `json:"fallbacks,omitempty"` // Fallback model names for failover
+	APIKeyValue SecureString `json:"api_key,omitzero" yaml:"api_key,omitempty"` // Single API key
+	APIBase     string       `json:"api_base,omitempty"`                        // API endpoint URL
+	Proxy       string       `json:"proxy,omitempty"`                           // HTTP proxy URL
+	Fallbacks   []string     `json:"fallbacks,omitempty"`                       // Fallback model names for failover
 
 	// Special providers (CLI-based, OAuth, etc.)
 	AuthMethod  string `json:"auth_method,omitempty"`  // Authentication method: oauth, token
@@ -661,6 +686,9 @@ func (c *ModelConfig) APIKey() string {
 	if len(c.APIKeys) > 0 {
 		return c.APIKeys[0].String()
 	}
+	if key := c.APIKeyValue.String(); key != "" {
+		return key
+	}
 	return ""
 }
 
@@ -681,6 +709,7 @@ func (c *ModelConfig) Validate() error {
 }
 
 func (c *ModelConfig) SetAPIKey(value string) {
+	c.APIKeyValue.Set(value)
 	if len(c.APIKeys) > 0 {
 		c.APIKeys[0].Set(value)
 	} else {
@@ -1007,115 +1036,27 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// First, try to detect config version by reading the version field
-	var versionInfo struct {
-		Version int `json:"version"`
-	}
-	if e := json.Unmarshal(data, &versionInfo); e != nil {
-		return nil, fmt.Errorf("failed to detect config version: %w", e)
-	}
 	if len(data) <= 10 {
 		logger.Warn(fmt.Sprintf("content is [%s]", string(data)))
 		return DefaultConfig(), nil
 	}
 
-	// Load config based on detected version
-	var cfg *Config
-	switch versionInfo.Version {
-	case 0:
-		logger.InfoF(
-			"config migrate start",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		// Legacy config (no version field)
-		v, e := loadConfigV0(data)
-		if e != nil {
-			return nil, e
-		}
-		cfg, e = v.Migrate()
-		if e != nil {
-			logger.ErrorF(
-				"config migrate fail",
-				map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-			)
-			return nil, e
-		}
-		logger.InfoF(
-			"config migrate success",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		err = makeBackup(path)
-		if err != nil {
-			return nil, err
-		}
-		// Load existing security config and merge with migrated one to prevent data loss
-		secErr := loadSecurityConfig(cfg, securityPath(path))
-		if secErr != nil && !os.IsNotExist(secErr) {
-			logger.WarnF(
-				"failed to load existing security config during migration",
-				map[string]any{"error": secErr},
-			)
-			return nil, fmt.Errorf("failed to load existing security config: %w", secErr)
-		}
-		defer func(cfg *Config) {
-			_ = SaveConfig(path, cfg)
-		}(cfg)
-	case 1:
-		// V1→V2 migration: infer Enabled and migrate channel config fields
-		logger.InfoF(
-			"config migrate start",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-		cfg, err = loadConfig(data)
-		if err != nil {
-			return nil, err
-		}
-		secPath := securityPath(path)
-		err = loadSecurityConfig(cfg, secPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load security config: %w", err)
-		}
+	cfg, err := loadConfig(data)
+	if err != nil {
+		return nil, err
+	}
 
-		oldCfg := &configV1{Config: *cfg}
-		cfg, err = oldCfg.Migrate()
-		if err != nil {
-			logger.ErrorF(
-				"config migrate fail",
-				map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-			)
-			return nil, err
-		}
-
-		err = makeBackup(path)
-		if err != nil {
-			return nil, err
-		}
-
-		defer func(cfg *Config) {
-			_ = SaveConfig(path, cfg)
-		}(cfg)
-		logger.InfoF(
-			"config migrate success",
-			map[string]any{"from": versionInfo.Version, "to": CurrentVersion},
-		)
-	case CurrentVersion:
-		// Current version
-		cfg, err = loadConfig(data)
-		if err != nil {
-			return nil, err
-		}
-		// Load security configuration
-		secPath := securityPath(path)
-		err = loadSecurityConfig(cfg, secPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load security config: %w", err)
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported config version: %d", versionInfo.Version)
+	secPath := securityPath(path)
+	err = loadSecurityConfig(cfg, secPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to load security config: %w", err)
 	}
 
 	if err = env.Parse(cfg); err != nil {
+		return nil, err
+	}
+
+	if err := rejectLegacyModelProviderConfig(cfg); err != nil {
 		return nil, err
 	}
 
@@ -1134,6 +1075,37 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func loadConfig(data []byte) (*Config, error) {
+	cfg := DefaultConfig()
+
+	// Pre-scan the JSON to check whether the user provided model_list entries.
+	// If so, clear the default list first so absent values do not inherit from
+	// the template.
+	var tmp Config
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return nil, err
+	}
+	if len(tmp.ModelList) > 0 {
+		cfg.ModelList = nil
+	}
+
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func rejectLegacyModelProviderConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.Agents.Defaults.Provider != "" {
+		return fmt.Errorf("legacy model/provider config is no longer supported")
+	}
+	return nil
 }
 
 func makeBackup(path string) error {
@@ -1346,6 +1318,116 @@ func expandMultiKeyModels(models []*ModelConfig) []*ModelConfig {
 	}
 
 	return expanded
+}
+
+type agentDefaultsV0 struct {
+	Workspace                 string         `json:"workspace"                       env:"PICOCLAW_AGENTS_DEFAULTS_WORKSPACE"`
+	RestrictToWorkspace       bool           `json:"restrict_to_workspace"           env:"PICOCLAW_AGENTS_DEFAULTS_RESTRICT_TO_WORKSPACE"`
+	AllowReadOutsideWorkspace bool           `json:"allow_read_outside_workspace"    env:"PICOCLAW_AGENTS_DEFAULTS_ALLOW_READ_OUTSIDE_WORKSPACE"`
+	Provider                  string         `json:"provider"                        env:"PICOCLAW_AGENTS_DEFAULTS_PROVIDER"`
+	ModelName                 string         `json:"model_name,omitempty"            env:"PICOCLAW_AGENTS_DEFAULTS_MODEL_NAME"`
+	Model                     string         `json:"model"                           env:"PICOCLAW_AGENTS_DEFAULTS_MODEL"` // Deprecated: use model_name instead
+	ModelFallbacks            []string       `json:"model_fallbacks,omitempty"`
+	ImageModel                string         `json:"image_model,omitempty"           env:"PICOCLAW_AGENTS_DEFAULTS_IMAGE_MODEL"`
+	ImageModelFallbacks       []string       `json:"image_model_fallbacks,omitempty"`
+	MaxTokens                 int            `json:"max_tokens"                      env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOKENS"`
+	Temperature               *float64       `json:"temperature,omitempty"           env:"PICOCLAW_AGENTS_DEFAULTS_TEMPERATURE"`
+	MaxToolIterations         int            `json:"max_tool_iterations"             env:"PICOCLAW_AGENTS_DEFAULTS_MAX_TOOL_ITERATIONS"`
+	SummarizeMessageThreshold int            `json:"summarize_message_threshold"     env:"PICOCLAW_AGENTS_DEFAULTS_SUMMARIZE_MESSAGE_THRESHOLD"`
+	SummarizeTokenPercent     int            `json:"summarize_token_percent"         env:"PICOCLAW_AGENTS_DEFAULTS_SUMMARIZE_TOKEN_PERCENT"`
+	MaxMediaSize              int            `json:"max_media_size,omitempty"        env:"PICOCLAW_AGENTS_DEFAULTS_MAX_MEDIA_SIZE"`
+	Routing                   *RoutingConfig `json:"routing,omitempty"`
+}
+
+// GetModelName returns the effective model name for the agent defaults.
+// It prefers the new "model_name" field but falls back to "model" for backward compatibility.
+func (d *agentDefaultsV0) GetModelName() string {
+	if d.ModelName != "" {
+		return d.ModelName
+	}
+	return d.Model
+}
+
+type providerConfigV0 struct {
+	APIKey         string `json:"api_key"                   env:"PICOCLAW_PROVIDERS_{{.Name}}_API_KEY"`
+	APIBase        string `json:"api_base"                  env:"PICOCLAW_PROVIDERS_{{.Name}}_API_BASE"`
+	Proxy          string `json:"proxy,omitempty"           env:"PICOCLAW_PROVIDERS_{{.Name}}_PROXY"`
+	RequestTimeout int    `json:"request_timeout,omitempty" env:"PICOCLAW_PROVIDERS_{{.Name}}_REQUEST_TIMEOUT"`
+	AuthMethod     string `json:"auth_method,omitempty"     env:"PICOCLAW_PROVIDERS_{{.Name}}_AUTH_METHOD"`
+	ConnectMode    string `json:"connect_mode,omitempty"    env:"PICOCLAW_PROVIDERS_{{.Name}}_CONNECT_MODE"`
+}
+
+type openAIProviderConfigV0 struct {
+	providerConfigV0
+	WebSearch bool `json:"web_search" env:"PICOCLAW_PROVIDERS_OPENAI_WEB_SEARCH"`
+}
+
+type providersConfigV0 struct {
+	Anthropic     providerConfigV0       `json:"anthropic"`
+	OpenAI        openAIProviderConfigV0 `json:"openai"`
+	LiteLLM       providerConfigV0       `json:"litellm"`
+	OpenRouter    providerConfigV0       `json:"openrouter"`
+	Groq          providerConfigV0       `json:"groq"`
+	Zhipu         providerConfigV0       `json:"zhipu"`
+	VLLM          providerConfigV0       `json:"vllm"`
+	Gemini        providerConfigV0       `json:"gemini"`
+	Nvidia        providerConfigV0       `json:"nvidia"`
+	Ollama        providerConfigV0       `json:"ollama"`
+	Moonshot      providerConfigV0       `json:"moonshot"`
+	ShengSuanYun  providerConfigV0       `json:"shengsuanyun"`
+	DeepSeek      providerConfigV0       `json:"deepseek"`
+	Cerebras      providerConfigV0       `json:"cerebras"`
+	Vivgrid       providerConfigV0       `json:"vivgrid"`
+	VolcEngine    providerConfigV0       `json:"volcengine"`
+	GitHubCopilot providerConfigV0       `json:"github_copilot"`
+	Antigravity   providerConfigV0       `json:"antigravity"`
+	Qwen          providerConfigV0       `json:"qwen"`
+	Mistral       providerConfigV0       `json:"mistral"`
+	Avian         providerConfigV0       `json:"avian"`
+	Minimax       providerConfigV0       `json:"minimax"`
+	LongCat       providerConfigV0       `json:"longcat"`
+	ModelScope    providerConfigV0       `json:"modelscope"`
+	Novita        providerConfigV0       `json:"novita"`
+}
+
+// IsEmpty checks if all provider configs are empty (no API keys or API bases set)
+// Note: WebSearch is an optimization option and doesn't count as "non-empty"
+func (p providersConfigV0) IsEmpty() bool {
+	return p.Anthropic.APIKey == "" && p.Anthropic.APIBase == "" &&
+		p.OpenAI.APIKey == "" && p.OpenAI.APIBase == "" &&
+		p.LiteLLM.APIKey == "" && p.LiteLLM.APIBase == "" &&
+		p.OpenRouter.APIKey == "" && p.OpenRouter.APIBase == "" &&
+		p.Groq.APIKey == "" && p.Groq.APIBase == "" &&
+		p.Zhipu.APIKey == "" && p.Zhipu.APIBase == "" &&
+		p.VLLM.APIKey == "" && p.VLLM.APIBase == "" &&
+		p.Gemini.APIKey == "" && p.Gemini.APIBase == "" &&
+		p.Nvidia.APIKey == "" && p.Nvidia.APIBase == "" &&
+		p.Ollama.APIKey == "" && p.Ollama.APIBase == "" &&
+		p.Moonshot.APIKey == "" && p.Moonshot.APIBase == "" &&
+		p.ShengSuanYun.APIKey == "" && p.ShengSuanYun.APIBase == "" &&
+		p.DeepSeek.APIKey == "" && p.DeepSeek.APIBase == "" &&
+		p.Cerebras.APIKey == "" && p.Cerebras.APIBase == "" &&
+		p.Vivgrid.APIKey == "" && p.Vivgrid.APIBase == "" &&
+		p.VolcEngine.APIKey == "" && p.VolcEngine.APIBase == "" &&
+		p.GitHubCopilot.APIKey == "" && p.GitHubCopilot.APIBase == "" &&
+		p.Antigravity.APIKey == "" && p.Antigravity.APIBase == "" &&
+		p.Qwen.APIKey == "" && p.Qwen.APIBase == "" &&
+		p.Mistral.APIKey == "" && p.Mistral.APIBase == "" &&
+		p.Avian.APIKey == "" && p.Avian.APIBase == "" &&
+		p.Minimax.APIKey == "" && p.Minimax.APIBase == "" &&
+		p.LongCat.APIKey == "" && p.LongCat.APIBase == "" &&
+		p.ModelScope.APIKey == "" && p.ModelScope.APIBase == "" &&
+		p.Novita.APIKey == "" && p.Novita.APIBase == ""
+}
+
+// MarshalJSON implements custom JSON marshaling for providersConfig
+// to omit the entire section when empty
+func (p providersConfigV0) MarshalJSON() ([]byte, error) {
+	if p.IsEmpty() {
+		return []byte("null"), nil
+	}
+	type Alias providersConfigV0
+	return json.Marshal((*Alias)(&p))
 }
 
 func (t *ToolsConfig) IsToolEnabled(name string) bool {

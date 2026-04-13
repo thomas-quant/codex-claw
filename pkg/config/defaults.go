@@ -17,6 +17,22 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		Version: CurrentVersion,
+		Runtime: RuntimeConfig{
+			Codex: CodexRuntimeConfig{
+				DefaultModel:                "gpt-5.4",
+				DefaultThinking:             "medium",
+				Fast:                        false,
+				AutoCompactThresholdPercent: 30,
+				DiscoveryFallbackModels:     []string{"gpt-5.4", "gpt-5.4-mini"},
+			},
+			Fallback: RuntimeFallbackConfig{
+				DeepSeek: DeepSeekFallbackConfig{
+					Enabled: true,
+					Model:   "deepseek-chat",
+					APIBase: "https://api.deepseek.com/v1",
+				},
+			},
+		},
 		// Isolation is opt-in so existing installations keep their current behavior
 		// until the user explicitly enables subprocess sandboxing.
 		Isolation: IsolationConfig{
