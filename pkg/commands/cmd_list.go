@@ -15,20 +15,10 @@ func listCommand() Definition {
 				Name:        "models",
 				Description: "Available models",
 				Handler: func(_ context.Context, req Request, rt *Runtime) error {
-					if models, ok := runtimeListModels(rt); ok {
-						return req.Reply(formatModelList(models))
-					}
-					name, provider, ok := runtimeCurrentModel(rt)
-					if !ok {
+					if rt == nil || rt.ListModels == nil {
 						return req.Reply(unavailableMsg)
 					}
-					if provider == "" {
-						provider = "runtime default"
-					}
-					return req.Reply(fmt.Sprintf(
-						"Current Model: %s\nProvider: %s\n\nUse /set model <name> to change the active thread model.",
-						name, provider,
-					))
+					return req.Reply(formatModelList(rt.ListModels()))
 				},
 			},
 			{
