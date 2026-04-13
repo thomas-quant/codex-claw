@@ -69,7 +69,7 @@ func TestAgentConfig_FullParse(t *testing.T) {
 	jsonData := `{
 		"agents": {
 			"defaults": {
-				"workspace": "~/.picoclaw/workspace",
+				"workspace": "~/.codex-claw/workspace",
 				"model": "glm-4.7",
 				"max_tokens": 8192,
 				"max_tool_iterations": 20
@@ -172,7 +172,7 @@ func TestLoadConfig_DeprecatesLegacyFallbackFields(t *testing.T) {
 	raw := `{
 		"agents": {
 			"defaults": {
-				"workspace": "~/.picoclaw/workspace",
+				"workspace": "~/.codex-claw/workspace",
 				"model_fallbacks": ["gpt-5.4-mini"],
 				"image_model_fallbacks": ["gpt-image-1-mini"]
 			},
@@ -296,7 +296,7 @@ func TestConfig_BackwardCompat_NoAgentsList(t *testing.T) {
 	jsonData := `{
 		"agents": {
 			"defaults": {
-				"workspace": "~/.picoclaw/workspace",
+				"workspace": "~/.codex-claw/workspace",
 				"model": "glm-4.7",
 				"max_tokens": 8192,
 				"max_tool_iterations": 20
@@ -947,7 +947,7 @@ func TestDefaultConfig_DMScope(t *testing.T) {
 }
 
 func TestDefaultConfig_WorkspacePath_Default(t *testing.T) {
-	t.Setenv("PICOCLAW_HOME", "")
+	t.Setenv(EnvHome, "")
 
 	var fakeHome string
 	if runtime.GOOS == "windows" {
@@ -959,21 +959,21 @@ func TestDefaultConfig_WorkspacePath_Default(t *testing.T) {
 	}
 
 	cfg := DefaultConfig()
-	want := filepath.Join(fakeHome, ".picoclaw", "workspace")
+	want := filepath.Join(fakeHome, ".codex-claw", "workspace")
 
 	if cfg.Agents.Defaults.Workspace != want {
 		t.Errorf("Default workspace path = %q, want %q", cfg.Agents.Defaults.Workspace, want)
 	}
 }
 
-func TestDefaultConfig_WorkspacePath_WithPicoclawHome(t *testing.T) {
-	t.Setenv("PICOCLAW_HOME", "/custom/picoclaw/home")
+func TestDefaultConfig_WorkspacePath_WithCodexClawHome(t *testing.T) {
+	t.Setenv(EnvHome, "/custom/picoclaw/home")
 
 	cfg := DefaultConfig()
 	want := filepath.Join("/custom/picoclaw/home", "workspace")
 
 	if cfg.Agents.Defaults.Workspace != want {
-		t.Errorf("Workspace path with PICOCLAW_HOME = %q, want %q", cfg.Agents.Defaults.Workspace, want)
+		t.Errorf("Workspace path with %s = %q, want %q", EnvHome, cfg.Agents.Defaults.Workspace, want)
 	}
 }
 
@@ -1264,12 +1264,12 @@ func TestResolveGatewayLogLevel_UsesEnvOverrideAndNormalizesInvalid(t *testing.T
 		t.Fatalf("setup: %v", err)
 	}
 
-	t.Setenv("PICOCLAW_LOG_LEVEL", "warning")
+	t.Setenv("CODEX_CLAW_LOG_LEVEL", "warning")
 	if got := ResolveGatewayLogLevel(cfgPath); got != "warn" {
 		t.Fatalf("ResolveGatewayLogLevel() with env override = %q, want %q", got, "warn")
 	}
 
-	t.Setenv("PICOCLAW_LOG_LEVEL", "garbage")
+	t.Setenv("CODEX_CLAW_LOG_LEVEL", "garbage")
 	if got := ResolveGatewayLogLevel(cfgPath); got != DefaultGatewayLogLevel {
 		t.Fatalf("ResolveGatewayLogLevel() with invalid env override = %q, want %q", got, DefaultGatewayLogLevel)
 	}

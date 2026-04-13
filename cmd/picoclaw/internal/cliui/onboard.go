@@ -21,8 +21,8 @@ func printOnboardPlain(logo string, encrypt bool, configPath string) {
 	fmt.Println("\nNext steps:")
 	if encrypt {
 		fmt.Println("  1. Set your encryption passphrase before starting codex-claw:")
-		fmt.Println("       export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS")
-		fmt.Println("       set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd")
+		fmt.Println("       export CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS")
+		fmt.Println("       set CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd")
 		fmt.Println("")
 		fmt.Println("  2. Review your runtime settings in", configPath)
 	} else {
@@ -83,8 +83,8 @@ func buildOnboardingSteps(encrypt bool, configPath string) string {
 	var b strings.Builder
 	if encrypt {
 		b.WriteString("1. Set your encryption passphrase before starting codex-claw:\n")
-		b.WriteString("   export PICOCLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS\n")
-		b.WriteString("   set PICOCLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd\n\n")
+		b.WriteString("   export CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS\n")
+		b.WriteString("   set CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd\n\n")
 		b.WriteString("2. Review your runtime settings in\n   ")
 		b.WriteString(configPath)
 		b.WriteString("\n")

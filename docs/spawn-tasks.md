@@ -64,5 +64,5 @@ The subagent has access to tools (message, web_search, etc.) and can communicate
 
 **Environment variables:**
 
-* `PICOCLAW_HEARTBEAT_ENABLED=false` to disable
-* `PICOCLAW_HEARTBEAT_INTERVAL=60` to change interval
+* `CODEX_CLAW_HEARTBEAT_ENABLED=false` to disable
+* `CODEX_CLAW_HEARTBEAT_INTERVAL=60` to change interval

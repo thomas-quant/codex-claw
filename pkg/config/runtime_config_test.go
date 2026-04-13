@@ -72,7 +72,7 @@ func TestLoadConfig_RejectsLegacyProviderKeys(t *testing.T) {
 	raw := `{
   "agents": {
     "defaults": {
-      "workspace": "~/.picoclaw/workspace",
+      "workspace": "~/.codex-claw/workspace",
       "provider": "deepseek",
       "model_name": "deepseek-chat",
       "model": "deepseek-chat"

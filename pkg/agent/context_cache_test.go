@@ -446,7 +446,7 @@ Updated content.`
 }
 
 // TestGlobalSkillFileContentChange verifies that modifying a global skill
-// (~/.picoclaw/skills) invalidates the cached system prompt.
+// (~/.codex-claw/skills) invalidates the cached system prompt.
 func TestGlobalSkillFileContentChange(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -454,7 +454,7 @@ func TestGlobalSkillFileContentChange(t *testing.T) {
 	tmpDir := setupWorkspace(t, nil)
 	defer os.RemoveAll(tmpDir)
 
-	globalSkillPath := filepath.Join(tmpHome, ".picoclaw", "skills", "global-skill", "SKILL.md")
+	globalSkillPath := filepath.Join(tmpHome, ".codex-claw", "skills", "global-skill", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(globalSkillPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +512,7 @@ func TestBuiltinSkillFileContentChange(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	builtinRoot := t.TempDir()
-	t.Setenv("PICOCLAW_BUILTIN_SKILLS", builtinRoot)
+	t.Setenv("CODEX_CLAW_BUILTIN_SKILLS", builtinRoot)
 
 	builtinSkillPath := filepath.Join(builtinRoot, "builtin-skill", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(builtinSkillPath), 0o755); err != nil {

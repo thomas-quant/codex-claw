@@ -88,8 +88,8 @@
 
 实例根遵循 `config.GetHome()`：
 
-- 如果设置了 `PICOCLAW_HOME`，使用该值。
-- 否则默认使用用户目录下的 `.picoclaw`。
+- 如果设置了 `CODEX_CLAW_HOME`，使用该值。
+- 否则默认使用用户目录下的 `.codex-claw`。
 
 如果 `config.GetHome()` 在隔离开启时最终回退到当前目录 `.`，启动应直接失败。
 

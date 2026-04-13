@@ -16,12 +16,12 @@ func TestGetConfigPath(t *testing.T) {
 	t.Setenv("HOME", "/tmp/home")
 
 	got := GetConfigPath()
-	want := filepath.Join("/tmp/home", ".picoclaw", "config.json")
+	want := filepath.Join("/tmp/home", ".codex-claw", "config.json")
 
 	assert.Equal(t, want, got)
 }
 
-func TestGetConfigPath_WithPICOCLAW_HOME(t *testing.T) {
+func TestGetConfigPath_WithCODEX_CLAW_HOME(t *testing.T) {
 	t.Setenv(config.EnvHome, "/custom/picoclaw")
 	t.Setenv("HOME", "/tmp/home")
 
@@ -31,8 +31,8 @@ func TestGetConfigPath_WithPICOCLAW_HOME(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestGetConfigPath_WithPICOCLAW_CONFIG(t *testing.T) {
-	t.Setenv("PICOCLAW_CONFIG", "/custom/config.json")
+func TestGetConfigPath_WithCODEX_CLAW_CONFIG(t *testing.T) {
+	t.Setenv(config.EnvConfig, "/custom/config.json")
 	t.Setenv(config.EnvHome, "/custom/picoclaw")
 	t.Setenv("HOME", "/tmp/home")
 
@@ -51,7 +51,7 @@ func TestGetConfigPath_Windows(t *testing.T) {
 	t.Setenv("USERPROFILE", testUserProfilePath)
 
 	got := GetConfigPath()
-	want := filepath.Join(testUserProfilePath, ".picoclaw", "config.json")
+	want := filepath.Join(testUserProfilePath, ".codex-claw", "config.json")
 
 	require.True(t, strings.EqualFold(got, want), "GetConfigPath() = %q, want %q", got, want)
 }

@@ -17,7 +17,7 @@ docker compose -f docker/docker-compose.yml --profile gateway up -d
 docker compose -f docker/docker-compose.yml logs -f picoclaw-gateway
 ```
 
-If you need host access to the gateway port, set `PICOCLAW_GATEWAY_HOST=0.0.0.0`.
+If you need host access to the gateway port, set `CODEX_CLAW_GATEWAY_HOST=0.0.0.0`.
 
 ## Agent Profile
 

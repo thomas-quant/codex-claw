@@ -7,6 +7,6 @@ const (
 	// AppName is the name of the app
 	AppName = "codex-claw"
 
-	DefaultPicoClawHome = ".picoclaw"
+	DefaultPicoClawHome = ".codex-claw"
 	WorkspaceName       = "workspace"
 )

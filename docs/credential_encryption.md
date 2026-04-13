@@ -18,8 +18,8 @@ Codex auth is outside this system. DeepSeek fallback credentials are expected fr
 
 `enc://` values are decrypted with:
 
-- `PICOCLAW_KEY_PASSPHRASE`
-- an SSH private key, either from `PICOCLAW_SSH_KEY_PATH` or the default key path
+- `CODEX_CLAW_KEY_PASSPHRASE`
+- an SSH private key, either from `CODEX_CLAW_SSH_KEY_PATH` or the default key path
 
 The current implementation uses AES-256-GCM with HKDF-SHA256-derived keys. The stored wire format remains:
 
@@ -45,6 +45,6 @@ channels:
 
 ## Notes
 
-- Keep `PICOCLAW_KEY_PASSPHRASE` out of shell history and version control.
+- Keep `CODEX_CLAW_KEY_PASSPHRASE` out of shell history and version control.
 - `file://` is often simpler than `enc://` for local deployments that already use secret files.
 - Existing encrypted values remain valid; the cleanup pass did not remove credential decryption support.

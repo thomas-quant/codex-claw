@@ -116,7 +116,7 @@ If your first goal is simply to prove that the hook flow works and observe real 
 
 1. Enable `hooks.enabled`
 2. Save the Python example from this document to a local file, for example `/tmp/review_gate.py`
-3. Set `PICOCLAW_HOOK_LOG_FILE`
+3. Set `CODEX_CLAW_HOOK_LOG_FILE`
 4. Restart the gateway
 5. Watch the log file with `tail -f`
 
@@ -145,7 +145,7 @@ Example:
           "approve_tool"
         ],
         "env": {
-          "PICOCLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
+          "CODEX_CLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
         }
       }
     }
@@ -447,8 +447,8 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-LOG_EVENTS = os.getenv("PICOCLAW_HOOK_LOG_EVENTS", "1").lower() not in {"0", "false", "no"}
-LOG_FILE = os.getenv("PICOCLAW_HOOK_LOG_FILE", "").strip()
+LOG_EVENTS = os.getenv("CODEX_CLAW_HOOK_LOG_EVENTS", "1").lower() not in {"0", "false", "no"}
+LOG_FILE = os.getenv("CODEX_CLAW_HOOK_LOG_FILE", "").strip()
 
 
 def append_log(entry: dict[str, Any]) -> None:
@@ -615,7 +615,7 @@ if __name__ == "__main__":
           "approve_tool"
         ],
         "env": {
-          "PICOCLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
+          "CODEX_CLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
         }
       }
     }
@@ -625,12 +625,12 @@ if __name__ == "__main__":
 
 ### Environment Variables
 
-- `PICOCLAW_HOOK_LOG_EVENTS`
+- `CODEX_CLAW_HOOK_LOG_EVENTS`
   Whether to write `hook.event` summaries to `stderr`, enabled by default
-- `PICOCLAW_HOOK_LOG_FILE`
+- `CODEX_CLAW_HOOK_LOG_FILE`
   Path to an external log file. When set, the script appends inbound hook requests, notifications, and outbound responses as JSON Lines
 
-Note: `PICOCLAW_HOOK_LOG_FILE` has no default. If you do not set it, the script does not write any file logs.
+Note: `CODEX_CLAW_HOOK_LOG_FILE` has no default. If you do not set it, the script does not write any file logs.
 
 ### How To Confirm It Received Hooks
 
@@ -638,7 +638,7 @@ Watch two places:
 
 - Gateway logs
   Useful for confirming that the host successfully started the process and for seeing event summaries written to `stderr`
-- `PICOCLAW_HOOK_LOG_FILE`
+- `CODEX_CLAW_HOOK_LOG_FILE`
   Useful for seeing the exact requests the script received and the exact responses it returned
 
 Typical interpretation:

@@ -13,7 +13,7 @@ Codex auth is not configured here. Start the Codex runtime in a shell that alrea
 ## File Layout
 
 ```text
-~/.picoclaw/
+~/.codex-claw/
 ├── config.json
 └── .security.yml
 ```
@@ -45,7 +45,7 @@ skills:
 ## Rules
 
 - Keep `.security.yml` out of version control.
-- Set permissions tightly, for example `chmod 600 ~/.picoclaw/.security.yml`.
+- Set permissions tightly, for example `chmod 600 ~/.codex-claw/.security.yml`.
 - Legacy `model_list` and `providers` keys are rejected when loading `.security.yml`.
 - Secret mapping is structural. There are no `ref:` indirections to maintain.
 

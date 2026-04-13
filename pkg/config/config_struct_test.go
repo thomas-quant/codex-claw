@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/caarlos0/env/v11"
@@ -120,7 +122,7 @@ func TestLoadSecurityValue(t *testing.T) {
 	assert.Equal(t, "token1", v5.Tools.Pico.Token.raw)
 
 	dir := t.TempDir()
-	sshKeyPath := filepath.Join(dir, "picoclaw_ed25519.key")
+	sshKeyPath := filepath.Join(dir, "codex-claw_ed25519.key")
 	if err = os.WriteFile(sshKeyPath, []byte("fake-ssh-key-material\n"), 0o600); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -142,4 +144,50 @@ func TestLoadSecurityValue(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, v6.Tools.Pico.Token)
 	assert.Equal(t, "newtoken1", v6.Tools.Pico.Token.String())
+}
+
+func TestConfigStructs_DoNotExposeLegacyEnvPrefixes(t *testing.T) {
+	const legacyEnvPrefix = "PICO" + "CLAW_"
+
+	var bad []string
+	visited := map[reflect.Type]bool{}
+
+	var walk func(reflect.Type, string)
+	walk = func(rt reflect.Type, path string) {
+		for {
+			switch rt.Kind() {
+			case reflect.Pointer, reflect.Slice, reflect.Array:
+				rt = rt.Elem()
+			case reflect.Map:
+				walk(rt.Elem(), path+"{}")
+				return
+			default:
+				goto done
+			}
+		}
+	done:
+		if rt.Kind() != reflect.Struct || visited[rt] {
+			return
+		}
+		visited[rt] = true
+
+		for i := range rt.NumField() {
+			field := rt.Field(i)
+			fieldPath := path + "." + field.Name
+			if envTag := field.Tag.Get("env"); strings.HasPrefix(envTag, legacyEnvPrefix) {
+				bad = append(bad, fieldPath+" env="+envTag)
+			}
+			if envPrefix := field.Tag.Get("envPrefix"); strings.HasPrefix(envPrefix, legacyEnvPrefix) {
+				bad = append(bad, fieldPath+" envPrefix="+envPrefix)
+			}
+			walk(field.Type, fieldPath)
+		}
+	}
+
+	walk(reflect.TypeOf(Config{}), "Config")
+	walk(reflect.TypeOf(GatewayConfig{}), "GatewayConfig")
+
+	if len(bad) > 0 {
+		t.Fatalf("legacy PicoClaw env tags remain:\n%s", strings.Join(bad, "\n"))
+	}
 }

@@ -105,13 +105,13 @@ Cron jobs are stored in:
 By default, the workspace is:
 
 ```text
-~/.picoclaw/workspace
+~/.codex-claw/workspace
 ```
 
-If `PICOCLAW_HOME` is set, the default workspace becomes:
+If `CODEX_CLAW_HOME` is set, the default workspace becomes:
 
 ```text
-$PICOCLAW_HOME/workspace
+$CODEX_CLAW_HOME/workspace
 ```
 
 Both the gateway and `codex-claw cron` CLI subcommands use the same `cron/jobs.json` file.

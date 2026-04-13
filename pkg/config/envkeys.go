@@ -1,7 +1,7 @@
-// PicoClaw - Ultra-lightweight personal AI agent
+// Codex-Claw - Ultra-lightweight personal AI agent
 // License: MIT
 //
-// Copyright (c) 2026 PicoClaw contributors
+// Copyright (c) 2026 Codex-Claw contributors
 
 package config
 
@@ -12,41 +12,41 @@ import (
 	"github.com/sipeed/picoclaw/pkg"
 )
 
-// Runtime environment variable keys for the picoclaw process.
+// Runtime environment variable keys for the codex-claw process.
 // These control the location of files and binaries at runtime and are read
-// directly via os.Getenv / os.LookupEnv. All picoclaw-specific keys use the
-// PICOCLAW_ prefix. Reference these constants instead of inline string
+// directly via os.Getenv / os.LookupEnv. All codex-claw-specific keys use the
+// CODEX_CLAW_ prefix. Reference these constants instead of inline string
 // literals to keep all supported knobs visible in one place and to prevent
 // typos.
 const (
-	// EnvHome overrides the base directory for all picoclaw data
+	// EnvHome overrides the base directory for all codex-claw data
 	// (config, workspace, skills, runtime state, …).
-	// Default: ~/.picoclaw
-	EnvHome = "PICOCLAW_HOME"
+	// Default: ~/.codex-claw
+	EnvHome = "CODEX_CLAW_HOME"
 
 	// EnvConfig overrides the full path to the JSON config file.
-	// Default: $PICOCLAW_HOME/config.json
-	EnvConfig = "PICOCLAW_CONFIG"
+	// Default: $CODEX_CLAW_HOME/config.json
+	EnvConfig = "CODEX_CLAW_CONFIG"
 
 	// EnvBuiltinSkills overrides the directory from which built-in
 	// skills are loaded.
 	// Default: <cwd>/skills
-	EnvBuiltinSkills = "PICOCLAW_BUILTIN_SKILLS"
+	EnvBuiltinSkills = "CODEX_CLAW_BUILTIN_SKILLS"
 
-	// EnvBinary overrides the path to the picoclaw executable.
+	// EnvBinary overrides the path to the codex-claw executable.
 	// Used by local helper flows that need to re-exec the current binary.
 	// Default: resolved from the same directory as the current executable.
-	EnvBinary = "PICOCLAW_BINARY"
+	EnvBinary = "CODEX_CLAW_BINARY"
 
 	// EnvGatewayHost overrides the host address for the gateway server.
 	// Default: "127.0.0.1"
-	EnvGatewayHost = "PICOCLAW_GATEWAY_HOST"
+	EnvGatewayHost = "CODEX_CLAW_GATEWAY_HOST"
 )
 
 func GetHome() string {
 	homePath, _ := os.UserHomeDir()
-	if picoclawHome := os.Getenv(EnvHome); picoclawHome != "" {
-		homePath = picoclawHome
+	if codexClawHome := os.Getenv(EnvHome); codexClawHome != "" {
+		homePath = codexClawHome
 	} else if homePath != "" {
 		homePath = filepath.Join(homePath, pkg.DefaultPicoClawHome)
 	}

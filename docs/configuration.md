@@ -2,14 +2,14 @@
 
 ## Paths
 
-- Default config: `~/.picoclaw/config.json`
-- Default home: `~/.picoclaw`
-- Default workspace: `~/.picoclaw/workspace`
+- Default config: `~/.codex-claw/config.json`
+- Default home: `~/.codex-claw`
+- Default workspace: `~/.codex-claw/workspace`
 
 Supported environment overrides:
 
-- `PICOCLAW_CONFIG`: load a specific config file
-- `PICOCLAW_HOME`: relocate the default home and workspace roots
+- `CODEX_CLAW_CONFIG`: load a specific config file
+- `CODEX_CLAW_HOME`: relocate the default home and workspace roots
 
 ## Runtime Block
 
@@ -56,7 +56,7 @@ Example:
 {
   "agents": {
     "defaults": {
-      "workspace": "~/.picoclaw/workspace",
+      "workspace": "~/.codex-claw/workspace",
       "max_tokens": 8192,
       "max_tool_iterations": 20
     }

@@ -15,7 +15,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
-const pidFileName = ".picoclaw.pid"
+const pidFileName = ".codex-claw.pid"
 
 var errInvalidPidFile = errors.New("invalid pid file")
 
