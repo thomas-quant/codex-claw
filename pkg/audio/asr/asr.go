@@ -112,20 +112,11 @@ func DetectTranscriber(cfg *config.Config) Transcriber {
 		return nil
 	}
 
-	if modelName := strings.TrimSpace(cfg.Voice.ModelName); modelName != "" {
-		modelCfg, err := cfg.GetModelConfig(modelName)
-		if err == nil {
-			if tr := transcriberFromModelConfig(modelCfg); tr != nil {
-				return tr
-			}
-		}
-	}
-
-	// Fall back to compatibility scanning for legacy auto-detected ASR providers.
-	for _, mc := range cfg.ModelList {
-		if tr := fallbackTranscriberFromModelConfig(mc); tr != nil {
-			return tr
-		}
+	// The codex-first runtime no longer exposes the legacy model catalog that
+	// voice provider auto-detection depended on. Keep voice disabled until an
+	// explicit runtime-native ASR config is added.
+	if strings.TrimSpace(cfg.Voice.ModelName) == "" {
+		return nil
 	}
 	return nil
 }
