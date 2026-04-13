@@ -145,7 +145,7 @@ Example:
           "approve_tool"
         ],
         "env": {
-          "PICOCLAW_HOOK_LOG_FILE": "/tmp/picoclaw-hook-review-gate.log"
+          "PICOCLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
         }
       }
     }
@@ -156,7 +156,7 @@ Example:
 Watch it with:
 
 ```bash
-tail -f /tmp/picoclaw-hook-review-gate.log
+tail -f /tmp/codex-claw-hook-review-gate.log
 ```
 
 If you are developing codex-claw itself rather than only validating the protocol, continue with the Go in-process example as well.
@@ -341,7 +341,7 @@ If code mounting is enough, call this after `AgentLoop` is initialized:
 
 ```go
 hook := myhooks.NewExampleLoggerHook(myhooks.ExampleLoggerHookOptions{
-    LogFile:   "/tmp/picoclaw-hook-example-logger.log",
+    LogFile:   "/tmp/codex-claw-hook-example-logger.log",
     LogEvents: true,
 })
 
@@ -397,7 +397,7 @@ Only after you register that builtin will the following config work:
         "enabled": true,
         "priority": 10,
         "config": {
-          "log_file": "/tmp/picoclaw-hook-example-logger.log",
+          "log_file": "/tmp/codex-claw-hook-example-logger.log",
           "log_events": true
         }
       }
@@ -615,7 +615,7 @@ if __name__ == "__main__":
           "approve_tool"
         ],
         "env": {
-          "PICOCLAW_HOOK_LOG_FILE": "/tmp/picoclaw-hook-review-gate.log"
+          "PICOCLAW_HOOK_LOG_FILE": "/tmp/codex-claw-hook-review-gate.log"
         }
       }
     }
