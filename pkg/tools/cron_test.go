@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/cron"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/cron"
 )
 
 type stubJobExecutor struct {

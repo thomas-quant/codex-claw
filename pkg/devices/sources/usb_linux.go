@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sipeed/codex-claw/pkg/devices/events"
-	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/devices/events"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 var usbClassToCapability = map[string]string{

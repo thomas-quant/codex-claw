@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 // ErrBusClosed is returned when publishing to a closed MessageBus.

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/routing"
-	"github.com/sipeed/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/routing"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 // SteeringMode controls how queued steering messages are dequeued.

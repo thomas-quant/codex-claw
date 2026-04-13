@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 const disableMaxPrivilege = 0x1

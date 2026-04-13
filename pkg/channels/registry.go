@@ -3,8 +3,8 @@ package channels
 import (
 	"sync"
 
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 // ChannelFactory is a constructor function that creates a Channel from config and message bus.

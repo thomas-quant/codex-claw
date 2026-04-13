@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 func TestExtractProtocol(t *testing.T) {

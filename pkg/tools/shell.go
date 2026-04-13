@@ -18,9 +18,9 @@ import (
 
 	"github.com/creack/pty"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/constants"
-	"github.com/sipeed/codex-claw/pkg/isolation"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/constants"
+	"github.com/thomas-quant/codex-claw/pkg/isolation"
 )
 
 var (

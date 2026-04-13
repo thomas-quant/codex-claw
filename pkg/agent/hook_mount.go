@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 type hookRuntime struct {

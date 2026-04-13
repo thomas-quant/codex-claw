@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sipeed/codex-claw/pkg/memory"
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/session"
+	"github.com/thomas-quant/codex-claw/pkg/memory"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/session"
 )
 
 // Compile-time interface satisfaction checks.

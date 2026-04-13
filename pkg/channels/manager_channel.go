@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 var survivingChannelNames = map[string]struct{}{

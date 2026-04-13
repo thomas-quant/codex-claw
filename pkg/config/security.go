@@ -16,7 +16,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/sipeed/codex-claw/pkg/fileutil"
+	"github.com/thomas-quant/codex-claw/pkg/fileutil"
 )
 
 const (

@@ -71,7 +71,7 @@ ls /dev/spidev*
 ```bash
 # Configure pins using pinmap utility
 # (MaixCAM uses a pinmap tool instead of devmem)
-# Refer to: https://wiki.sipeed.com/hardware/en/maixcam/gpio.html
+# Refer to your board vendor's GPIO documentation.
 
 # Load i2c-dev
 modprobe i2c-dev
@@ -108,8 +108,7 @@ ls /dev/i2c-*
 
 Uses the same SG2002 SoC as LicheeRV Nano. GPIO and I2C access follows the same pinmux procedure. Refer to the LicheeRV Nano section above.
 
-Check NanoKVM-specific pin headers for available I2C/SPI lines:
-- https://wiki.sipeed.com/hardware/en/kvm/NanoKVM/introduction.html
+Check NanoKVM-specific pin headers in the board vendor documentation.
 
 ---
 
@@ -118,7 +117,7 @@ Check NanoKVM-specific pin headers for available I2C/SPI lines:
 ### devmem not found
 The `devmem` utility may not be in the default image. Options:
 - Use `busybox devmem` if busybox is installed
-- Download devmem from the Sipeed package repository
+- Download devmem from the board vendor package repository
 - Cross-compile from source (single C file)
 
 ### Dynamic bus numbering

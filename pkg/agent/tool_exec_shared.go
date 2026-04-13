@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/constants"
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/tools"
-	"github.com/sipeed/codex-claw/pkg/utils"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/constants"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/utils"
 )
 
 type beforeToolHookOutcome struct {

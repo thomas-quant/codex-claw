@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/codexruntime"
+	"github.com/thomas-quant/codex-claw/pkg/codexruntime"
 )
 
 func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T) {

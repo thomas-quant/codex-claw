@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 const (

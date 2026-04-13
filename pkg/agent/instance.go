@@ -8,15 +8,15 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/isolation"
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/media"
-	"github.com/sipeed/codex-claw/pkg/memory"
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/routing"
-	"github.com/sipeed/codex-claw/pkg/session"
-	"github.com/sipeed/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/isolation"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/media"
+	"github.com/thomas-quant/codex-claw/pkg/memory"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/routing"
+	"github.com/thomas-quant/codex-claw/pkg/session"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 // AgentInstance represents a fully configured agent with its own workspace,

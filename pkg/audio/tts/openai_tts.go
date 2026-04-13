@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/providers/common"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/providers/common"
 )
 
 type OpenAITTSProvider struct {

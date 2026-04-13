@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 const (

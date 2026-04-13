@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/sipeed/codex-claw/pkg/memory"
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/memory"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 // JSONLBackend adapts a memory.Store into the SessionStore interface.

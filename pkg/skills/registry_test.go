@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/sipeed/codex-claw/pkg/utils"
+	"github.com/thomas-quant/codex-claw/pkg/utils"
 )
 
 // mockRegistry is a test double implementing SkillRegistry.

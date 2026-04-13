@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/constants"
-	"github.com/sipeed/codex-claw/pkg/cron"
-	"github.com/sipeed/codex-claw/pkg/utils"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/constants"
+	"github.com/thomas-quant/codex-claw/pkg/cron"
+	"github.com/thomas-quant/codex-claw/pkg/utils"
 )
 
 // JobExecutor is the interface for executing cron jobs through the agent

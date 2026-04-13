@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sipeed/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 // ExpandTool recovers full message content by ID.

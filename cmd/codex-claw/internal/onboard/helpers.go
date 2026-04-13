@@ -8,10 +8,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/cliui"
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/credential"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cliui"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/credential"
 )
 
 func onboard(encrypt bool) {

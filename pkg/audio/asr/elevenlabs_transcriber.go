@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/utils"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/utils"
 )
 
 // ElevenLabsTranscriber uses the ElevenLabs Scribe API for speech-to-text.

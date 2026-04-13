@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/providers/protocoltypes"
-	"github.com/sipeed/codex-claw/pkg/seahorse"
-	"github.com/sipeed/codex-claw/pkg/session"
-	"github.com/sipeed/codex-claw/pkg/tokenizer"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/providers/protocoltypes"
+	"github.com/thomas-quant/codex-claw/pkg/seahorse"
+	"github.com/thomas-quant/codex-claw/pkg/session"
+	"github.com/thomas-quant/codex-claw/pkg/tokenizer"
 )
 
 // seahorseContextManager adapts seahorse.Engine to agent.ContextManager.

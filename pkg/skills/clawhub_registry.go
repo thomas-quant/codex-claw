@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/utils"
+	"github.com/thomas-quant/codex-claw/pkg/utils"
 )
 
 const (

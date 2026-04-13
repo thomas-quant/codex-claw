@@ -13,17 +13,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/agent"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/cliui"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/cron"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/gateway"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/onboard"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/skills"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/status"
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal/version"
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/updater"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/agent"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cliui"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cron"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/gateway"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/onboard"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/skills"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/status"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/version"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/updater"
 )
 
 var rootNoColor bool

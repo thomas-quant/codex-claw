@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/mcp"
-	"github.com/sipeed/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/mcp"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 type mcpRuntime struct {

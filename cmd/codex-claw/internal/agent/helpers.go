@@ -11,11 +11,11 @@ import (
 
 	"github.com/ergochat/readline"
 
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal"
-	"github.com/sipeed/codex-claw/pkg/agent"
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/pkg/agent"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 func agentCmd(message, sessionKey, model string, debug bool) error {

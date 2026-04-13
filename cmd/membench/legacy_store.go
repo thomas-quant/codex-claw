@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/sipeed/codex-claw/pkg/providers"
-	"github.com/sipeed/codex-claw/pkg/session"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/session"
 )
 
 // LegacyStore wraps session.SessionManager for legacy baseline.

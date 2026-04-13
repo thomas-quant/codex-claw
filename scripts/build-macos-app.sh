@@ -53,7 +53,7 @@ cat > "${APP_CONTENTS}/Info.plist" << 'EOF'
     <key>CFBundleExecutable</key>
     <string>codex-claw</string>
     <key>CFBundleIdentifier</key>
-    <string>com.sipeed.codexclaw</string>
+    <string>com.thomasquant.codexclaw</string>
     <key>CFBundleName</key>
     <string>Codex Claw</string>
     <key>CFBundleDisplayName</key>

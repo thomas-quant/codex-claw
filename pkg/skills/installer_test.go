@@ -25,47 +25,47 @@ func TestParseGitHubRef(t *testing.T) {
 	}{
 		{
 			name:         "simple owner/repo",
-			repo:         "sipeed/codex-claw",
-			wantOwner:    "sipeed",
+			repo:         "thomas-quant/codex-claw",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "main",
 			wantSubPath:  "",
 		},
 		{
 			name:         "owner/repo with subpath",
-			repo:         "sipeed/codex-claw/skills/test",
-			wantOwner:    "sipeed",
+			repo:         "thomas-quant/codex-claw/skills/test",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "main",
 			wantSubPath:  "skills/test",
 		},
 		{
 			name:         "full URL with tree",
-			repo:         "https://github.com/sipeed/codex-claw/tree/dev/skills/test",
-			wantOwner:    "sipeed",
+			repo:         "https://github.com/thomas-quant/codex-claw/tree/dev/skills/test",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "dev",
 			wantSubPath:  "skills/test",
 		},
 		{
 			name:         "full URL with blob",
-			repo:         "https://github.com/sipeed/codex-claw/blob/main/README.md",
-			wantOwner:    "sipeed",
+			repo:         "https://github.com/thomas-quant/codex-claw/blob/main/README.md",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "main",
 			wantSubPath:  "README.md",
 		},
 		{
 			name:         "full URL without ref",
-			repo:         "https://github.com/sipeed/codex-claw",
-			wantOwner:    "sipeed",
+			repo:         "https://github.com/thomas-quant/codex-claw",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "main",
 			wantSubPath:  "",
 		},
 		{
 			name:           "invalid format - single part",
-			repo:           "sipeed",
+			repo:           "thomas-quant",
 			wantErr:        true,
 			wantErrContain: "expected 'owner/repo'",
 		},
@@ -77,14 +77,14 @@ func TestParseGitHubRef(t *testing.T) {
 		},
 		{
 			name:           "invalid GitHub URL - only one path part",
-			repo:           "https://github.com/sipeed",
+			repo:           "https://github.com/thomas-quant",
 			wantErr:        true,
 			wantErrContain: "invalid GitHub URL",
 		},
 		{
 			name:         "with whitespace",
-			repo:         "  sipeed/codex-claw  ",
-			wantOwner:    "sipeed",
+			repo:         "  thomas-quant/codex-claw  ",
+			wantOwner:    "thomas-quant",
 			wantRepoName: "codex-claw",
 			wantRef:      "main",
 			wantSubPath:  "",
@@ -436,7 +436,7 @@ func TestSkillInstaller_InstallFromGitHub_SkillAlreadyExists(t *testing.T) {
 	os.WriteFile(filepath.Join(existingSkill, "SKILL.md"), []byte("existing"), 0o644)
 
 	// Try to install the same skill - should fail
-	err = installer.InstallFromGitHub(context.Background(), "sipeed/codex-claw")
+	err = installer.InstallFromGitHub(context.Background(), "thomas-quant/codex-claw")
 	if err == nil {
 		t.Error("InstallFromGitHub() expected error for existing skill, got nil")
 	}

@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sipeed/codex-claw/pkg/seahorse"
+	"github.com/thomas-quant/codex-claw/pkg/seahorse"
 )
 
 // EvalResult holds per-sample evaluation results for one mode.

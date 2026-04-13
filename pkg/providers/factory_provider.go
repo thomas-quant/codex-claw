@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/codexruntime"
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/codexruntime"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 type protocolMeta struct {

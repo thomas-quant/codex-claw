@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/fileutil"
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/fileutil"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 const (

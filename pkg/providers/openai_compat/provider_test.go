@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/providers/common"
-	"github.com/sipeed/codex-claw/pkg/providers/protocoltypes"
+	"github.com/thomas-quant/codex-claw/pkg/providers/common"
+	"github.com/thomas-quant/codex-claw/pkg/providers/protocoltypes"
 )
 
 func TestProviderChat_UsesMaxCompletionTokensForGLM(t *testing.T) {

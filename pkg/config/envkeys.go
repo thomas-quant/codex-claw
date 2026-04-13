@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sipeed/codex-claw/pkg"
+	"github.com/thomas-quant/codex-claw/pkg"
 )
 
 // Runtime environment variable keys for the codex-claw process.

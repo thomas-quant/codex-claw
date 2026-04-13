@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 const interactiveThreadInactivityLimit = 8 * time.Hour

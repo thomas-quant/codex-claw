@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sipeed/codex-claw/pkg/commands"
+	"github.com/thomas-quant/codex-claw/pkg/commands"
 )
 
 type mockRegistrar struct{}

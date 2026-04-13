@@ -1,4 +1,4 @@
-module github.com/sipeed/codex-claw
+module github.com/thomas-quant/codex-claw
 
 go 1.25.9
 

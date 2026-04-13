@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sipeed/codex-claw/pkg/skills"
+	"github.com/thomas-quant/codex-claw/pkg/skills"
 )
 
 func TestInstallSkillToolName(t *testing.T) {

@@ -15,9 +15,9 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/sipeed/codex-claw/pkg/config"
-	codexclawmcp "github.com/sipeed/codex-claw/pkg/mcp"
-	"github.com/sipeed/codex-claw/pkg/tools"
+	"github.com/thomas-quant/codex-claw/pkg/config"
+	codexclawmcp "github.com/thomas-quant/codex-claw/pkg/mcp"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 func boolPtr(b bool) *bool { return &b }

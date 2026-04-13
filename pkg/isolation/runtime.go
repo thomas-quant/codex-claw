@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sipeed/codex-claw/pkg"
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 // MountRule describes a source-to-target mount exposed inside the Linux

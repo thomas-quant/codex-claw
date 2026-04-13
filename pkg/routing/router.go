@@ -1,7 +1,7 @@
 package routing
 
 import (
-	"github.com/sipeed/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/providers"
 )
 
 // defaultThreshold is used when the config threshold is zero or negative.

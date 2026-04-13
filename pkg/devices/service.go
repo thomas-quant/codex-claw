@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/bus"
-	"github.com/sipeed/codex-claw/pkg/constants"
-	"github.com/sipeed/codex-claw/pkg/devices/events"
-	"github.com/sipeed/codex-claw/pkg/devices/sources"
-	"github.com/sipeed/codex-claw/pkg/logger"
-	"github.com/sipeed/codex-claw/pkg/state"
+	"github.com/thomas-quant/codex-claw/pkg/bus"
+	"github.com/thomas-quant/codex-claw/pkg/constants"
+	"github.com/thomas-quant/codex-claw/pkg/devices/events"
+	"github.com/thomas-quant/codex-claw/pkg/devices/sources"
+	"github.com/thomas-quant/codex-claw/pkg/logger"
+	"github.com/thomas-quant/codex-claw/pkg/state"
 )
 
 type Service struct {

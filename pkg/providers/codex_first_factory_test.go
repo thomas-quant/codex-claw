@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 func TestCreateProvider_UsesExplicitStartupModelOverride(t *testing.T) {

@@ -162,19 +162,19 @@ pkg/identity/
 package channels
 
 import (
-    "github.com/sipeed/codex-claw/pkg/bus"
-    "github.com/sipeed/codex-claw/pkg/config"
+    "github.com/thomas-quant/codex-claw/pkg/bus"
+    "github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 // 新代码（重构分支）
 package telegram
 
 import (
-    "github.com/sipeed/codex-claw/pkg/bus"
-    "github.com/sipeed/codex-claw/pkg/channels"     // 引用父包
-    "github.com/sipeed/codex-claw/pkg/config"
-    "github.com/sipeed/codex-claw/pkg/identity"      // 新增
-    "github.com/sipeed/codex-claw/pkg/media"          // 新增（如需媒体）
+    "github.com/thomas-quant/codex-claw/pkg/bus"
+    "github.com/thomas-quant/codex-claw/pkg/channels"     // 引用父包
+    "github.com/thomas-quant/codex-claw/pkg/config"
+    "github.com/thomas-quant/codex-claw/pkg/identity"      // 新增
+    "github.com/thomas-quant/codex-claw/pkg/media"          // 新增（如需媒体）
 )
 ```
 
@@ -321,9 +321,9 @@ c.HandleMessage(ctx, peer, messageID, senderID, chatID, content, mediaRefs, meta
 package telegram
 
 import (
-    "github.com/sipeed/codex-claw/pkg/bus"
-    "github.com/sipeed/codex-claw/pkg/channels"
-    "github.com/sipeed/codex-claw/pkg/config"
+    "github.com/thomas-quant/codex-claw/pkg/bus"
+    "github.com/thomas-quant/codex-claw/pkg/channels"
+    "github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 func init() {
@@ -338,9 +338,9 @@ func init() {
 ```go
 // cmd/codex-claw/internal/gateway/helpers.go
 import (
-    _ "github.com/sipeed/codex-claw/pkg/channels/telegram"   // 触发 init() 注册
-    _ "github.com/sipeed/codex-claw/pkg/channels/discord"
-    _ "github.com/sipeed/codex-claw/pkg/channels/your_new_channel"  // 新增
+    _ "github.com/thomas-quant/codex-claw/pkg/channels/telegram"   // 触发 init() 注册
+    _ "github.com/thomas-quant/codex-claw/pkg/channels/discord"
+    _ "github.com/thomas-quant/codex-claw/pkg/channels/your_new_channel"  // 新增
 )
 ```
 
@@ -421,9 +421,9 @@ Agent Loop 的主要变化：
 package matrix
 
 import (
-    "github.com/sipeed/codex-claw/pkg/bus"
-    "github.com/sipeed/codex-claw/pkg/channels"
-    "github.com/sipeed/codex-claw/pkg/config"
+    "github.com/thomas-quant/codex-claw/pkg/bus"
+    "github.com/thomas-quant/codex-claw/pkg/channels"
+    "github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 func init() {
@@ -442,11 +442,11 @@ import (
     "context"
     "fmt"
 
-    "github.com/sipeed/codex-claw/pkg/bus"
-    "github.com/sipeed/codex-claw/pkg/channels"
-    "github.com/sipeed/codex-claw/pkg/config"
-    "github.com/sipeed/codex-claw/pkg/identity"
-    "github.com/sipeed/codex-claw/pkg/logger"
+    "github.com/thomas-quant/codex-claw/pkg/bus"
+    "github.com/thomas-quant/codex-claw/pkg/channels"
+    "github.com/thomas-quant/codex-claw/pkg/config"
+    "github.com/thomas-quant/codex-claw/pkg/identity"
+    "github.com/thomas-quant/codex-claw/pkg/logger"
 )
 
 // MatrixChannel implements channels.Channel for the Matrix protocol.
@@ -814,7 +814,7 @@ if m.config.Channels.Matrix.Enabled && m.config.Channels.Matrix.Token != "" {
 ```go
 // cmd/codex-claw/internal/gateway/helpers.go
 import (
-    _ "github.com/sipeed/codex-claw/pkg/channels/matrix"
+    _ "github.com/thomas-quant/codex-claw/pkg/channels/matrix"
 )
 ```
 

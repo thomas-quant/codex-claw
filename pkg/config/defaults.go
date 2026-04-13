@@ -8,7 +8,7 @@ package config
 import (
 	"path/filepath"
 
-	"github.com/sipeed/codex-claw/pkg"
+	"github.com/thomas-quant/codex-claw/pkg"
 )
 
 // DefaultConfig returns the default configuration for Codex Claw.

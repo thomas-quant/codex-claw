@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/sipeed/codex-claw/pkg"
-	"github.com/sipeed/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg"
+	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
 func TestResolveInstanceRoot_UsesCodexClawHome(t *testing.T) {

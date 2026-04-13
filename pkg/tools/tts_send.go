@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sipeed/codex-claw/pkg/audio/tts"
-	"github.com/sipeed/codex-claw/pkg/media"
+	"github.com/thomas-quant/codex-claw/pkg/audio/tts"
+	"github.com/thomas-quant/codex-claw/pkg/media"
 )
 
 type SendTTSTool struct {

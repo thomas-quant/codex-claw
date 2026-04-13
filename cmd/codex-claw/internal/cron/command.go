@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sipeed/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
 )
 
 func NewCronCommand() *cobra.Command {

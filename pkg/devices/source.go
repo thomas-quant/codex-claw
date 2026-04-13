@@ -1,5 +1,5 @@
 package devices
 
-import "github.com/sipeed/codex-claw/pkg/devices/events"
+import "github.com/thomas-quant/codex-claw/pkg/devices/events"
 
 type EventSource = events.EventSource

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sipeed/codex-claw/pkg/providers/protocoltypes"
+	"github.com/thomas-quant/codex-claw/pkg/providers/protocoltypes"
 )
 
 type (

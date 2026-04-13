@@ -4,7 +4,7 @@
 #define MyAppName "Codex Claw"
 #define MyAppVersion "1.0"
 #define MyAppPublisher "Codex Claw"
-#define MyAppURL "https://github.com/sipeed/codex-claw"
+#define MyAppURL "https://github.com/thomas-quant/codex-claw"
 #define MyAppExeName "codex-claw.exe"
 
 [Setup]
