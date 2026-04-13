@@ -14,6 +14,15 @@ import (
 
 var bindingFilenameUnsafeChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
+const (
+	bindingMetadataRecoveryMode     = "recovery_mode"
+	bindingMetadataRestartAttempted = "restart_attempted"
+	bindingMetadataResumeAttempted  = "resume_attempted"
+	bindingMetadataFellBackToFresh  = "fell_back_to_fresh"
+	bindingMetadataForceFreshThread = "force_fresh_thread"
+	bindingMetadataLastCompactionAt = "last_compaction_at"
+)
+
 type Binding struct {
 	Key               string         `json:"key"`
 	ThreadID          string         `json:"thread_id"`
@@ -179,11 +188,12 @@ func (s *BindingStore) ResetThread(key string) error {
 	}
 	binding.ThreadID = ""
 	if binding.Metadata != nil {
-		delete(binding.Metadata, "recovery_mode")
-		delete(binding.Metadata, "restart_attempted")
-		delete(binding.Metadata, "resume_attempted")
-		delete(binding.Metadata, "fell_back_to_fresh")
-		delete(binding.Metadata, "last_compaction_at")
+		delete(binding.Metadata, bindingMetadataRecoveryMode)
+		delete(binding.Metadata, bindingMetadataRestartAttempted)
+		delete(binding.Metadata, bindingMetadataResumeAttempted)
+		delete(binding.Metadata, bindingMetadataFellBackToFresh)
+		delete(binding.Metadata, bindingMetadataForceFreshThread)
+		delete(binding.Metadata, bindingMetadataLastCompactionAt)
 		if len(binding.Metadata) == 0 {
 			binding.Metadata = nil
 		}
