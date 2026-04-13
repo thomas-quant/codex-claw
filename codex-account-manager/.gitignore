@@ -1,0 +1,13 @@
+.worktrees/
+docs/
+__pycache__/
+.pytest_cache/
+.venv/
+.codex
+.codex/
+.codex-switch
+.codex-switch/
+*.pyc
+build/
+dist/
+*.egg-info/

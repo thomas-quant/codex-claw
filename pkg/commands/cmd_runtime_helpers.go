@@ -1,0 +1,124 @@
+package commands
+
+import (
+	"fmt"
+	"strings"
+)
+
+func runtimeSetModel(rt *Runtime, value string) (string, error) {
+	if rt == nil {
+		return "", nil
+	}
+	if rt.SetModel != nil {
+		return rt.SetModel(value)
+	}
+	if rt.SwitchModel != nil {
+		return rt.SwitchModel(value)
+	}
+	return "", nil
+}
+
+func runtimeSetThinking(rt *Runtime, value string) (string, error) {
+	if rt == nil || rt.SetThinking == nil {
+		return "", nil
+	}
+	return rt.SetThinking(value)
+}
+
+func runtimeToggleFast(rt *Runtime) (bool, error) {
+	if rt == nil || rt.ToggleFast == nil {
+		return false, nil
+	}
+	return rt.ToggleFast()
+}
+
+func runtimeCompactThread(rt *Runtime) error {
+	if rt == nil || rt.CompactThread == nil {
+		return nil
+	}
+	return rt.CompactThread()
+}
+
+func runtimeResetThread(rt *Runtime) error {
+	if rt == nil || rt.ResetThread == nil {
+		return nil
+	}
+	return rt.ResetThread()
+}
+
+func runtimeReadStatus(rt *Runtime) (StatusSnapshot, bool) {
+	if rt == nil || rt.ReadStatus == nil {
+		return StatusSnapshot{}, false
+	}
+	return rt.ReadStatus(), true
+}
+
+func runtimeListModels(rt *Runtime) ([]ModelInfo, bool) {
+	if rt == nil || rt.ListModels == nil {
+		return nil, false
+	}
+	return rt.ListModels(), true
+}
+
+func runtimeCurrentModel(rt *Runtime) (name, provider string, ok bool) {
+	if status, found := runtimeReadStatus(rt); found && status.Model != "" {
+		return status.Model, status.Provider, true
+	}
+	if rt != nil && rt.GetModelInfo != nil {
+		name, provider = rt.GetModelInfo()
+		if name != "" || provider != "" {
+			return name, provider, true
+		}
+	}
+	return "", "", false
+}
+
+func formatModelList(models []ModelInfo) string {
+	if len(models) == 0 {
+		return "No available models"
+	}
+	var b strings.Builder
+	b.WriteString("Available Models:\n")
+	for i, model := range models {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString("- ")
+		b.WriteString(model.Name)
+		if model.Provider != "" {
+			b.WriteString(" (")
+			b.WriteString(model.Provider)
+			b.WriteString(")")
+		}
+	}
+	return b.String()
+}
+
+func formatStatusSnapshot(status StatusSnapshot) string {
+	var lines []string
+	if status.ThreadID != "" {
+		lines = append(lines, fmt.Sprintf("Thread ID: %s", status.ThreadID))
+	}
+	if status.Model != "" {
+		if status.Provider != "" {
+			lines = append(lines, fmt.Sprintf("Model: %s (Provider: %s)", status.Model, status.Provider))
+		} else {
+			lines = append(lines, fmt.Sprintf("Model: %s", status.Model))
+		}
+	}
+	if status.ThinkingMode != "" {
+		lines = append(lines, fmt.Sprintf("Thinking: %s", status.ThinkingMode))
+	}
+	if status.FastEnabled {
+		lines = append(lines, "Fast: enabled")
+	} else {
+		lines = append(lines, "Fast: disabled")
+	}
+	if status.RecoveryState != "" {
+		lines = append(lines, fmt.Sprintf("Recovery: %s", status.RecoveryState))
+	}
+	if len(lines) == 0 {
+		return "No runtime status available"
+	}
+	return strings.Join(lines, "\n")
+}
