@@ -1272,7 +1272,7 @@ func TestMakeBackup_AlsoBacksSecurityFile(t *testing.T) {
 	secPath := securityPath(configPath)
 
 	os.WriteFile(configPath, []byte(`{"version":2}`), 0o600)
-	os.WriteFile(secPath, []byte(`model_list:\n  test:0:\n    api_keys:\n      - "sk-test"\n`), 0o600)
+	os.WriteFile(secPath, []byte("{}\n"), 0o600)
 
 	if err := makeBackup(configPath); err != nil {
 		t.Fatalf("makeBackup: %v", err)

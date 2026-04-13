@@ -23,10 +23,8 @@ const (
 	SecurityConfigFile = ".security.yml"
 )
 
-// SecurityConfig is the separate on-disk contract for model credentials.
-type SecurityConfig struct {
-	ModelList SecureModelList `yaml:"model_list,omitempty"`
-}
+// SecurityConfig is the separate on-disk contract for non-model secret helpers.
+type SecurityConfig struct{}
 
 // securityPath returns the path to security.yml relative to the config file
 func securityPath(configPath string) string {

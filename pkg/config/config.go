@@ -138,7 +138,7 @@ type BuildInfo struct {
 }
 
 // MarshalJSON implements custom JSON marshaling for Config
-// to omit providers section when empty and session when empty
+// to omit session when empty.
 func (c *Config) MarshalJSON() ([]byte, error) {
 	type Alias Config
 	aux := &struct {
@@ -246,7 +246,7 @@ type SessionConfig struct {
 // requiring any keyword matching — all scoring is language-agnostic.
 type RoutingConfig struct {
 	Enabled    bool    `json:"enabled"`
-	LightModel string  `json:"light_model"` // model_name from model_list to use for simple tasks
+	LightModel string  `json:"light_model"` // default model alias to use for simple tasks
 	Threshold  float64 `json:"threshold"`   // complexity score in [0,1]; score >= threshold → primary model
 }
 
@@ -1066,6 +1066,7 @@ func loadConfig(data []byte) (*Config, error) {
 func rejectLegacyConfigData(data []byte) error {
 	var probe struct {
 		ModelList json.RawMessage `json:"model_list"`
+		Providers json.RawMessage `json:"providers"`
 		Agents    struct {
 			Defaults struct {
 				Provider  json.RawMessage `json:"provider"`
@@ -1077,7 +1078,7 @@ func rejectLegacyConfigData(data []byte) error {
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
-	if len(probe.ModelList) > 0 || len(probe.Agents.Defaults.Provider) > 0 || len(probe.Agents.Defaults.ModelName) > 0 || len(probe.Agents.Defaults.Model) > 0 {
+	if len(probe.ModelList) > 0 || len(probe.Providers) > 0 || len(probe.Agents.Defaults.Provider) > 0 || len(probe.Agents.Defaults.ModelName) > 0 || len(probe.Agents.Defaults.Model) > 0 {
 		return fmt.Errorf("legacy model/provider config is no longer supported")
 	}
 	return nil

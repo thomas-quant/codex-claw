@@ -78,6 +78,11 @@ func TestLoadConfig_RejectsLegacyProviderKeys(t *testing.T) {
       "model": "deepseek-chat"
     }
   },
+  "providers": {
+    "deepseek": {
+      "model": "deepseek/deepseek-chat"
+    }
+  },
   "model_list": [
     {
       "model_name": "deepseek-chat",
