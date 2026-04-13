@@ -1972,57 +1972,70 @@ turnLoop:
 			ts.markGracefulTerminalUsed()
 		}
 
-			llmOpts := map[string]any{
-				"max_tokens":       ts.agent.MaxTokens,
-				"temperature":      ts.agent.Temperature,
-				"prompt_cache_key": ts.agent.ID,
-			}
-			if useNativeSearch {
-				llmOpts["native_search"] = true
+		llmOpts := map[string]any{
+			"max_tokens":       ts.agent.MaxTokens,
+			"temperature":      ts.agent.Temperature,
+			"prompt_cache_key": ts.agent.ID,
+		}
+		if useNativeSearch {
+			llmOpts["native_search"] = true
+		}
+
+		llmModel := activeModel
+		currentTurnTime := time.Now().UTC()
+		interactiveControl := providers.InteractiveControlRequest{
+			LastUserMessageAt: currentTurnTime.Format(time.RFC3339Nano),
+		}
+		interactiveStatus := providers.InteractiveThreadStatus{}
+		haveInteractiveStatus := false
+		forceFreshThread := false
+		shouldBootstrapFreshThread := false
+		if runtimeController, ok := activeProvider.(providers.InteractiveRuntimeController); ok {
+			if ts.agent.ThinkingLevel != ThinkingOff {
+				interactiveControl.ThinkingMode = string(ts.agent.ThinkingLevel)
+				llmOpts["thinking_level"] = interactiveControl.ThinkingMode
 			}
 
-			llmModel := activeModel
-			interactiveControl := providers.InteractiveControlRequest{
-				LastUserMessageAt: time.Now().UTC().Format(time.RFC3339Nano),
-			}
-			if runtimeController, ok := activeProvider.(providers.InteractiveRuntimeController); ok {
-				if ts.agent.ThinkingLevel != ThinkingOff {
-					interactiveControl.ThinkingMode = string(ts.agent.ThinkingLevel)
-					llmOpts["thinking_level"] = interactiveControl.ThinkingMode
+			statusCtx, statusCancel := context.WithTimeout(turnCtx, 10*time.Second)
+			status, statusErr := runtimeController.ReadThreadStatus(statusCtx, threadControlReq)
+			statusCancel()
+			if statusErr != nil {
+				logger.WarnCF("agent", "Failed to read interactive runtime status", map[string]any{
+					"agent_id": ts.agent.ID,
+					"error":    statusErr.Error(),
+				})
+			} else {
+				haveInteractiveStatus = true
+				interactiveStatus = status
+				if status.Model != "" {
+					llmModel = status.Model
 				}
-
-				statusCtx, statusCancel := context.WithTimeout(turnCtx, 10*time.Second)
-				status, statusErr := runtimeController.ReadThreadStatus(statusCtx, threadControlReq)
-				statusCancel()
-				if statusErr != nil {
-					logger.WarnCF("agent", "Failed to read interactive runtime status", map[string]any{
-						"agent_id": ts.agent.ID,
-						"error":    statusErr.Error(),
-					})
-				} else {
-					if status.Model != "" {
-						llmModel = status.Model
-					}
-					if status.ThinkingMode != "" {
-						interactiveControl.ThinkingMode = status.ThinkingMode
-						llmOpts["thinking_level"] = status.ThinkingMode
-					}
-					interactiveControl.FastEnabled = status.FastEnabled
-					if status.FastEnabled {
-						llmOpts["fast"] = true
-					}
+				if status.ThinkingMode != "" {
+					interactiveControl.ThinkingMode = status.ThinkingMode
+					llmOpts["thinking_level"] = status.ThinkingMode
 				}
-			} else if ts.agent.ThinkingLevel != ThinkingOff {
-				if tc, ok := ts.agent.Provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
-					llmOpts["thinking_level"] = string(ts.agent.ThinkingLevel)
-				} else {
-					logger.WarnCF("agent", "thinking_level is set but current provider does not support it, ignoring",
-						map[string]any{"agent_id": ts.agent.ID, "thinking_level": string(ts.agent.ThinkingLevel)})
+				forceFreshThread = status.ForceFreshThread ||
+					shouldForceFreshInteractiveThread(currentTurnTime, status.LastUserMessageAt)
+				shouldBootstrapFreshThread = status.ThreadID == "" || forceFreshThread
+				interactiveControl.ForceFreshThread = forceFreshThread
+				interactiveControl.FastEnabled = status.FastEnabled
+				interactiveControl.FastEnabledSet = true
+				if status.FastEnabled {
+					llmOpts["fast"] = true
 				}
 			}
-			if al.hooks != nil {
-				llmReq, decision := al.hooks.BeforeLLM(turnCtx, &LLMHookRequest{
-					Meta:             ts.eventMeta("runTurn", "turn.llm.request"),
+		} else if ts.agent.ThinkingLevel != ThinkingOff {
+			if tc, ok := ts.agent.Provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
+				llmOpts["thinking_level"] = string(ts.agent.ThinkingLevel)
+			} else {
+				logger.WarnCF("agent", "thinking_level is set but current provider does not support it, ignoring",
+					map[string]any{"agent_id": ts.agent.ID, "thinking_level": string(ts.agent.ThinkingLevel)})
+			}
+		}
+		bootstrapInput := ""
+		if al.hooks != nil {
+			llmReq, decision := al.hooks.BeforeLLM(turnCtx, &LLMHookRequest{
+				Meta:             ts.eventMeta("runTurn", "turn.llm.request"),
 				Model:            llmModel,
 				Messages:         callMessages,
 				Tools:            providerToolDefs,
@@ -2046,6 +2059,23 @@ turnLoop:
 				_ = ts.requestHardAbort()
 				turnStatus = TurnEndStatusAborted
 				return al.abortTurn(ts)
+			}
+		}
+		if shouldBootstrapFreshThread {
+			bootstrapInput = buildInteractiveBootstrapInput(callMessages, 3)
+		}
+		if haveInteractiveStatus && interactiveStatus.ThreadID != "" && !forceFreshThread {
+			threshold := al.cfg.Runtime.Codex.AutoCompactThresholdPercent
+			if threshold > 0 &&
+				remainingContextPercent(ts.agent.ContextWindow, callMessages, providerToolDefs, ts.agent.MaxTokens) <= threshold {
+				if threadController, ok := activeProvider.(providers.InteractiveThreadController); ok {
+					if compactErr := threadController.CompactThread(turnCtx, threadControlReq); compactErr != nil {
+						logger.WarnCF("agent", "Proactive interactive compact failed", map[string]any{
+							"session_key": ts.sessionKey,
+							"error":       compactErr.Error(),
+						})
+					}
+				}
 			}
 		}
 
@@ -2121,31 +2151,6 @@ turnLoop:
 			al.activeRequests.Add(1)
 			defer al.activeRequests.Done()
 
-			if len(activeCandidates) > 1 && al.fallback != nil {
-				fbResult, fbErr := al.fallback.Execute(
-					providerCtx,
-					activeCandidates,
-					func(ctx context.Context, provider, model string) (*providers.LLMResponse, error) {
-						candidateProvider := activeProvider
-						if cp, ok := ts.agent.CandidateProviders[providers.ModelKey(provider, model)]; ok {
-							candidateProvider = cp
-						}
-						return candidateProvider.Chat(ctx, messagesForCall, toolDefsForCall, model, llmOpts)
-					},
-				)
-				if fbErr != nil {
-					return nil, fbErr
-				}
-				if fbResult.Provider != "" && len(fbResult.Attempts) > 0 {
-					logger.InfoCF(
-						"agent",
-						fmt.Sprintf("Fallback: succeeded with %s/%s after %d attempts",
-							fbResult.Provider, fbResult.Model, len(fbResult.Attempts)+1),
-						map[string]any{"agent_id": ts.agent.ID, "iteration": iteration},
-					)
-				}
-				return fbResult.Response, nil
-			}
 			if interactiveProvider, ok := activeProvider.(providers.InteractiveProvider); ok {
 				var onChunk func(string)
 				if al.bus != nil && ts.channel != "" && ts.chatID != "" {
@@ -2170,25 +2175,67 @@ turnLoop:
 						}
 					}
 				}
-					return interactiveProvider.RunInteractiveTurn(providerCtx, providers.InteractiveTurnRequest{
-						SessionKey: ts.sessionKey,
-						AgentID:    ts.agent.ID,
-						Channel:    ts.channel,
-						ChatID:     ts.chatID,
-						Model:      llmModel,
-						Messages:   messagesForCall,
-						Tools:      toolDefsForCall,
-						Options:    llmOpts,
-						Recovery: providers.InteractiveRecoveryRequest{
-							AllowServerRestart: true,
-							AllowResume:        true,
-						},
-						Control: interactiveControl,
-						OnChunk:    onChunk,
-						ExecuteTool: func(toolCtx context.Context, call providers.InteractiveToolCall) (providers.InteractiveToolResult, error) {
-							return al.executeInteractiveToolCall(toolCtx, ts, call)
-						},
+				resp, err := interactiveProvider.RunInteractiveTurn(providerCtx, providers.InteractiveTurnRequest{
+					SessionKey: ts.sessionKey,
+					AgentID:    ts.agent.ID,
+					Channel:    ts.channel,
+					ChatID:     ts.chatID,
+					Model:      llmModel,
+					Messages:   messagesForCall,
+					Tools:      toolDefsForCall,
+					Options:    llmOpts,
+					Recovery: providers.InteractiveRecoveryRequest{
+						AllowServerRestart: true,
+						AllowResume:        true,
+					},
+					BootstrapInput: bootstrapInput,
+					Control:        interactiveControl,
+					OnChunk:        onChunk,
+					ExecuteTool: func(toolCtx context.Context, call providers.InteractiveToolCall) (providers.InteractiveToolResult, error) {
+						return al.executeInteractiveToolCall(toolCtx, ts, call)
+					},
 				})
+				if err == nil {
+					return resp, nil
+				}
+
+				cancelInteractiveStream()
+				if fbResp, handled, fbErr := al.tryDeepSeekRuntimeFallback(
+					providerCtx,
+					ts.agent,
+					messagesForCall,
+					toolDefsForCall,
+					llmOpts,
+					err,
+				); handled {
+					return fbResp, fbErr
+				}
+				return nil, err
+			}
+			if len(activeCandidates) > 1 && al.fallback != nil {
+				fbResult, fbErr := al.fallback.Execute(
+					providerCtx,
+					activeCandidates,
+					func(ctx context.Context, provider, model string) (*providers.LLMResponse, error) {
+						candidateProvider := activeProvider
+						if cp, ok := ts.agent.CandidateProviders[providers.ModelKey(provider, model)]; ok {
+							candidateProvider = cp
+						}
+						return candidateProvider.Chat(ctx, messagesForCall, toolDefsForCall, model, llmOpts)
+					},
+				)
+				if fbErr != nil {
+					return nil, fbErr
+				}
+				if fbResult.Provider != "" && len(fbResult.Attempts) > 0 {
+					logger.InfoCF(
+						"agent",
+						fmt.Sprintf("Fallback: succeeded with %s/%s after %d attempts",
+							fbResult.Provider, fbResult.Model, len(fbResult.Attempts)+1),
+						map[string]any{"agent_id": ts.agent.ID, "iteration": iteration},
+					)
+				}
+				return fbResult.Response, nil
 			}
 			return activeProvider.Chat(providerCtx, messagesForCall, toolDefsForCall, llmModel, llmOpts)
 		}
@@ -2254,10 +2301,10 @@ turnLoop:
 				continue
 			}
 
-				if isContextError && retry < maxRetries && !ts.opts.NoHistory {
-					al.emitEvent(
-						EventKindLLMRetry,
-						ts.eventMeta("runTurn", "turn.llm.retry"),
+			if isContextError && retry < maxRetries && !ts.opts.NoHistory {
+				al.emitEvent(
+					EventKindLLMRetry,
+					ts.eventMeta("runTurn", "turn.llm.retry"),
 					LLMRetryPayload{
 						Attempt:    retry + 1,
 						MaxRetries: maxRetries,
@@ -2274,58 +2321,58 @@ turnLoop:
 					},
 				)
 
-					if retry == 0 && !constants.IsInternalChannel(ts.channel) {
-						retryNotice := "Context window exceeded. Compressing history and retrying..."
-						if _, ok := activeProvider.(providers.InteractiveThreadController); ok {
-							retryNotice = "Context window exceeded. Compacting thread and retrying..."
-						}
-						al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-							Channel: ts.channel,
-							ChatID:  ts.chatID,
-							Content: retryNotice,
+				if retry == 0 && !constants.IsInternalChannel(ts.channel) {
+					retryNotice := "Context window exceeded. Compressing history and retrying..."
+					if _, ok := activeProvider.(providers.InteractiveThreadController); ok {
+						retryNotice = "Context window exceeded. Compacting thread and retrying..."
+					}
+					al.bus.PublishOutbound(ctx, bus.OutboundMessage{
+						Channel: ts.channel,
+						ChatID:  ts.chatID,
+						Content: retryNotice,
+					})
+				}
+
+				if threadController, ok := activeProvider.(providers.InteractiveThreadController); ok {
+					if compactErr := threadController.CompactThread(turnCtx, threadControlReq); compactErr != nil {
+						logger.WarnCF("agent", "Interactive thread compact failed", map[string]any{
+							"session_key": ts.sessionKey,
+							"error":       compactErr.Error(),
 						})
 					}
-
-					if threadController, ok := activeProvider.(providers.InteractiveThreadController); ok {
-						if compactErr := threadController.CompactThread(turnCtx, threadControlReq); compactErr != nil {
-							logger.WarnCF("agent", "Interactive thread compact failed", map[string]any{
-								"session_key": ts.sessionKey,
-								"error":       compactErr.Error(),
-							})
-						}
-					} else {
-						if compactErr := al.contextManager.Compact(turnCtx, &CompactRequest{
-							SessionKey: ts.sessionKey,
-							Reason:     ContextCompressReasonRetry,
-							Budget:     ts.agent.ContextWindow,
-						}); compactErr != nil {
-							logger.WarnCF("agent", "Context overflow compact failed", map[string]any{
-								"session_key": ts.sessionKey,
-								"error":       compactErr.Error(),
-							})
-						}
-						ts.refreshRestorePointFromSession(ts.agent)
-						// Re-assemble from CM after compact.
-						if asmResp, asmErr := al.contextManager.Assemble(turnCtx, &AssembleRequest{
-							SessionKey: ts.sessionKey,
-							Budget:     ts.agent.ContextWindow,
-							MaxTokens:  ts.agent.MaxTokens,
-						}); asmErr == nil && asmResp != nil {
-							history = asmResp.History
-							summary = asmResp.Summary
-						}
-						messages = ts.agent.ContextBuilder.BuildMessages(
-							history, summary, "",
-							nil, ts.channel, ts.chatID, ts.opts.SenderID, ts.opts.SenderDisplayName,
-							activeSkillNames(ts.agent, ts.opts)...,
-						)
-						callMessages = messages
-						if gracefulTerminal {
-							callMessages = append(append([]providers.Message(nil), messages...), ts.interruptHintMessage())
-						}
+				} else {
+					if compactErr := al.contextManager.Compact(turnCtx, &CompactRequest{
+						SessionKey: ts.sessionKey,
+						Reason:     ContextCompressReasonRetry,
+						Budget:     ts.agent.ContextWindow,
+					}); compactErr != nil {
+						logger.WarnCF("agent", "Context overflow compact failed", map[string]any{
+							"session_key": ts.sessionKey,
+							"error":       compactErr.Error(),
+						})
 					}
-					continue
+					ts.refreshRestorePointFromSession(ts.agent)
+					// Re-assemble from CM after compact.
+					if asmResp, asmErr := al.contextManager.Assemble(turnCtx, &AssembleRequest{
+						SessionKey: ts.sessionKey,
+						Budget:     ts.agent.ContextWindow,
+						MaxTokens:  ts.agent.MaxTokens,
+					}); asmErr == nil && asmResp != nil {
+						history = asmResp.History
+						summary = asmResp.Summary
+					}
+					messages = ts.agent.ContextBuilder.BuildMessages(
+						history, summary, "",
+						nil, ts.channel, ts.chatID, ts.opts.SenderID, ts.opts.SenderDisplayName,
+						activeSkillNames(ts.agent, ts.opts)...,
+					)
+					callMessages = messages
+					if gracefulTerminal {
+						callMessages = append(append([]providers.Message(nil), messages...), ts.interruptHintMessage())
+					}
 				}
+				continue
+			}
 			break
 		}
 
@@ -3747,7 +3794,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 			}
 		}
 		rt.GetModelInfo = func() (string, string) {
-			return agent.Model, resolvedCandidateProvider(agent.Candidates, cfg.Agents.Defaults.Provider)
+			return agent.Model, resolvedCandidateProvider(agent.Candidates, runtimeDefaultProvider(""))
 		}
 		rt.SwitchModel = func(value string) (string, error) {
 			value = strings.TrimSpace(value)
@@ -3761,7 +3808,7 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 				return "", fmt.Errorf("failed to initialize model %q: %w", value, err)
 			}
 
-			nextCandidates := resolveModelCandidates(cfg, cfg.Agents.Defaults.Provider, value, agent.Fallbacks)
+			nextCandidates := resolveModelCandidates(cfg, runtimeDefaultProvider(""), value, agent.Fallbacks)
 			if len(nextCandidates) == 0 {
 				return "", fmt.Errorf("model %q did not resolve to any provider candidates", value)
 			}
