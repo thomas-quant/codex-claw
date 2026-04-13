@@ -48,7 +48,7 @@ func GetHome() string {
 	if codexClawHome := os.Getenv(EnvHome); codexClawHome != "" {
 		homePath = codexClawHome
 	} else if homePath != "" {
-		homePath = filepath.Join(homePath, pkg.DefaultPicoClawHome)
+		homePath = filepath.Join(homePath, pkg.DefaultCodexClawHome)
 	}
 	if homePath == "" {
 		homePath = "."
