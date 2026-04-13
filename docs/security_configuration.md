@@ -46,7 +46,7 @@ skills:
 
 - Keep `.security.yml` out of version control.
 - Set permissions tightly, for example `chmod 600 ~/.picoclaw/.security.yml`.
-- Legacy voice-catalog and `providers` keys are rejected when loading `.security.yml`.
+- Legacy `model_list` and `providers` keys are rejected when loading `.security.yml`.
 - Secret mapping is structural. There are no `ref:` indirections to maintain.
 
 ## Verification

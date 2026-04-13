@@ -2,12 +2,12 @@
 
 ## Supported Runtime Paths
 
-This fork keeps two runtime paths:
+This fork actively documents two runtime paths:
 
 - `codex`: primary runtime via `codex app-server`
 - `deepseek`: fallback HTTP path
 
-Everything else from the pre-fork provider catalog is out of scope for the active docs.
+Everything else from the pre-fork provider catalog is out of scope for the active operator docs, even if some shared HTTP/OpenAI-compatible plumbing still exists under the hood.
 
 Legacy fallback arrays such as `model_fallbacks`, `image_model_fallbacks`, `model.fallbacks`, and `subagents.model.fallbacks` are deprecated. PicoClaw may still parse them for compatibility, but the runtime ignores them.
 
