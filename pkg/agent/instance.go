@@ -150,7 +150,7 @@ func NewAgentInstance(
 
 	maxTokens := defaults.MaxTokens
 	if maxTokens == 0 {
-		maxTokens = 8192
+		maxTokens = 128000
 	}
 
 	contextWindow := defaults.ContextWindow

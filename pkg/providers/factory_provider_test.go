@@ -1,9 +1,12 @@
 package providers
 
 import (
+	"context"
 	"os"
 	"testing"
 
+	"github.com/thomas-quant/codex-claw/pkg/codexaccounts"
+	"github.com/thomas-quant/codex-claw/pkg/codexruntime"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
@@ -67,6 +70,59 @@ func TestCreateProviderFromConfig_UsesHTTPProviderForOpenAI(t *testing.T) {
 	}
 }
 
+func TestCreateProviderFromConfig_UsesManagedCodexRunner(t *testing.T) {
+	t.Setenv(config.EnvHome, t.TempDir())
+
+	originalClientFactory := newCodexRunnerClient
+	defer func() { newCodexRunnerClient = originalClientFactory }()
+
+	var gotWorkspace string
+	var gotTimeout int
+	var gotEnv map[string]string
+	newCodexRunnerClient = func(workspace string, requestTimeoutSeconds int, envOverrides map[string]string) codexruntime.RunnerClient {
+		gotWorkspace = workspace
+		gotTimeout = requestTimeoutSeconds
+		gotEnv = map[string]string{}
+		for key, value := range envOverrides {
+			gotEnv[key] = value
+		}
+		return &stubRunnerClient{}
+	}
+
+	cfg := &config.ModelConfig{
+		ModelName:      "codex-managed",
+		Model:          "codex/gpt-5.4",
+		Workspace:      "/tmp/workspace-a",
+		RequestTimeout: 42,
+	}
+
+	provider, modelID, err := CreateProviderFromConfig(cfg)
+	if err != nil {
+		t.Fatalf("CreateProviderFromConfig() error = %v", err)
+	}
+	codexProvider, ok := provider.(*CodexAppServerProvider)
+	if !ok {
+		t.Fatalf("CreateProviderFromConfig() provider type = %T, want *CodexAppServerProvider", provider)
+	}
+	if _, ok := codexProvider.runner.(*codexaccounts.Coordinator); !ok {
+		t.Fatalf("runner type = %T, want *codexaccounts.Coordinator", codexProvider.runner)
+	}
+	if modelID != "gpt-5.4" {
+		t.Fatalf("CreateProviderFromConfig() modelID = %q, want %q", modelID, "gpt-5.4")
+	}
+	if gotWorkspace != cfg.Workspace {
+		t.Fatalf("workspace = %q, want %q", gotWorkspace, cfg.Workspace)
+	}
+	if gotTimeout != cfg.RequestTimeout {
+		t.Fatalf("request timeout = %d, want %d", gotTimeout, cfg.RequestTimeout)
+	}
+
+	layout := codexaccounts.ResolveLayout(config.GetHome())
+	if gotEnv["CODEX_HOME"] != layout.CodexHome {
+		t.Fatalf("CODEX_HOME = %q, want %q", gotEnv["CODEX_HOME"], layout.CodexHome)
+	}
+}
+
 func TestDeepSeekFallbackModelConfig_UsesRuntimeDefaults(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
 	_ = os.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
@@ -88,4 +144,46 @@ func TestDeepSeekFallbackModelConfig_UsesRuntimeDefaults(t *testing.T) {
 	if modelCfg.APIKey() != "deepseek-test-key" {
 		t.Fatalf("APIKey() = %q, want %q", modelCfg.APIKey(), "deepseek-test-key")
 	}
+}
+
+type stubRunnerClient struct{}
+
+func (stubRunnerClient) ResumeThread(context.Context, string, []codexruntime.DynamicToolDefinition) error {
+	return nil
+}
+
+func (stubRunnerClient) StartThread(context.Context, string, []codexruntime.DynamicToolDefinition) (string, error) {
+	return "", nil
+}
+
+func (stubRunnerClient) RunTextTurn(context.Context, codexruntime.RunTurnRequest) (string, error) {
+	return "", nil
+}
+
+func (stubRunnerClient) Restart(context.Context) error {
+	return nil
+}
+
+func (stubRunnerClient) StartNativeCompaction(context.Context, string) error {
+	return nil
+}
+
+func (stubRunnerClient) ListModels(context.Context) ([]codexruntime.ModelCatalogEntry, error) {
+	return nil, nil
+}
+
+func (stubRunnerClient) ReadAccount(context.Context, bool) (codexruntime.AccountSnapshot, error) {
+	return codexruntime.AccountSnapshot{}, nil
+}
+
+func (stubRunnerClient) ReadRateLimits(context.Context) ([]codexruntime.RateLimitSnapshot, error) {
+	return nil, nil
+}
+
+func (stubRunnerClient) Close() error {
+	return nil
+}
+
+func (stubRunnerClient) Status() codexruntime.ClientStatus {
+	return codexruntime.ClientStatus{}
 }

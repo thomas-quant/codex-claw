@@ -1,26 +1,44 @@
 package onboard
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/term"
 
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cliui"
+	"github.com/thomas-quant/codex-claw/pkg/codexaccounts"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 	"github.com/thomas-quant/codex-claw/pkg/credential"
 )
 
-func onboard(encrypt bool) {
+type chatSurface string
+
+const (
+	surfaceTelegram      chatSurface = "telegram"
+	surfaceDiscord       chatSurface = "discord"
+	defaultAllowFromUser             = "YOUR_USER_ID"
+)
+
+type onboardOptions struct {
+	Encrypt        bool
+	Surface        string
+	ImportAuthFile string
+}
+
+func onboard(opts onboardOptions) {
 	configPath := internal.GetConfigPath()
 
 	configExists := false
 	if _, err := os.Stat(configPath); err == nil {
 		configExists = true
-		if encrypt {
+		if opts.Encrypt {
 			// Only ask for confirmation when *both* config and SSH key already exist,
 			// indicating a full re-onboard that would reset the config to defaults.
 			sshKeyPath, _ := credential.DefaultSSHKeyPath()
@@ -41,7 +59,7 @@ func onboard(encrypt bool) {
 	}
 
 	var err error
-	if encrypt {
+	if opts.Encrypt {
 		fmt.Println("\nSet up credential encryption")
 		fmt.Println("-----------------------------")
 		passphrase, pErr := promptPassphrase()
@@ -70,17 +88,33 @@ func onboard(encrypt bool) {
 			os.Exit(1)
 		}
 	} else {
+		surface, surfaceErr := resolveInitialSurface(opts.Surface, os.Stdin, os.Stdout)
+		if surfaceErr != nil {
+			fmt.Printf("Error selecting chat surface: %v\n", surfaceErr)
+			os.Exit(1)
+		}
 		cfg = config.DefaultConfig()
+		applyInitialSurfaceSelection(cfg, surface)
 	}
 	if err := config.SaveConfig(configPath, cfg); err != nil {
 		fmt.Printf("Error saving config: %v\n", err)
 		os.Exit(1)
 	}
 
+	sourceAuth := opts.ImportAuthFile
+	if sourceAuth == "" {
+		sourceAuth = defaultCodexAuthFile()
+	}
+	importedAuth, err := maybeImportLiveAuth(os.Stdin, os.Stdout, sourceAuth, importManagedLiveAuth)
+	if err != nil {
+		fmt.Printf("Error importing Codex auth: %v\n", err)
+		os.Exit(1)
+	}
+
 	workspace := cfg.WorkspacePath()
 	createWorkspaceTemplates(workspace)
 
-	cliui.PrintOnboardComplete(internal.Logo, encrypt, configPath)
+	cliui.PrintOnboardComplete(internal.Logo, opts.Encrypt, configPath, selectedSurfaceLabel(cfg), importedAuth)
 }
 
 // promptPassphrase reads the encryption passphrase twice from the terminal
@@ -142,6 +176,108 @@ func createWorkspaceTemplates(workspace string) {
 	err := copyEmbeddedToTarget(workspace)
 	if err != nil {
 		fmt.Printf("Error copying workspace templates: %v\n", err)
+	}
+}
+
+func chooseInitialSurface(in io.Reader, out io.Writer) (chatSurface, error) {
+	_, _ = fmt.Fprint(out, "Initial chat surface [telegram/discord] (default telegram): ")
+
+	reader := bufio.NewReader(in)
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return parseSurface(line)
+}
+
+func resolveInitialSurface(raw string, in io.Reader, out io.Writer) (chatSurface, error) {
+	if strings.TrimSpace(raw) != "" {
+		return parseSurface(raw)
+	}
+	return chooseInitialSurface(in, out)
+}
+
+func parseSurface(raw string) (chatSurface, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", string(surfaceTelegram):
+		return surfaceTelegram, nil
+	case string(surfaceDiscord):
+		return surfaceDiscord, nil
+	default:
+		return "", fmt.Errorf("unsupported surface %q", strings.TrimSpace(raw))
+	}
+}
+
+func applyInitialSurfaceSelection(cfg *config.Config, surface chatSurface) {
+	switch surface {
+	case surfaceDiscord:
+		cfg.Channels.Telegram.Enabled = false
+		cfg.Channels.Telegram.AllowFrom = nil
+		cfg.Channels.Discord.Enabled = true
+		cfg.Channels.Discord.AllowFrom = config.FlexibleStringSlice{defaultAllowFromUser}
+	default:
+		cfg.Channels.Telegram.Enabled = true
+		cfg.Channels.Telegram.AllowFrom = config.FlexibleStringSlice{defaultAllowFromUser}
+		cfg.Channels.Discord.Enabled = false
+		cfg.Channels.Discord.AllowFrom = nil
+	}
+}
+
+func maybeImportLiveAuth(in io.Reader, out io.Writer, sourceAuth string, importFn func(string) error) (bool, error) {
+	if sourceAuth == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(sourceAuth); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	_, _ = fmt.Fprintf(out, "Import existing Codex auth from %s? (y/n): ", sourceAuth)
+	reader := bufio.NewReader(in)
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	if strings.ToLower(strings.TrimSpace(line)) != "y" {
+		return false, nil
+	}
+	if err := importFn(sourceAuth); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func importManagedLiveAuth(sourceAuth string) error {
+	payload, err := os.ReadFile(sourceAuth)
+	if err != nil {
+		return err
+	}
+	layout := codexaccounts.ResolveLayout(internal.GetCodexClawHome())
+	return codexaccounts.NewStore(layout).WriteLiveAuth(payload)
+}
+
+func defaultCodexAuthFile() string {
+	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if codexHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		codexHome = filepath.Join(homeDir, ".codex")
+	}
+	return filepath.Join(codexHome, "auth.json")
+}
+
+func selectedSurfaceLabel(cfg *config.Config) string {
+	switch {
+	case cfg.Channels.Telegram.Enabled:
+		return string(surfaceTelegram)
+	case cfg.Channels.Discord.Enabled:
+		return string(surfaceDiscord)
+	default:
+		return ""
 	}
 }
 

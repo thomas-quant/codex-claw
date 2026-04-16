@@ -1149,15 +1149,21 @@ func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *test
 			{ID: "gpt-5.4-mini", Provider: "codex"},
 		},
 		status: providers.InteractiveThreadStatus{
-			ThreadID:          "thr_123",
-			Model:             "gpt-5.4",
-			Provider:          "codex",
-			ThinkingMode:      "medium",
-			FastEnabled:       false,
-			LastUserMessageAt: time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC),
-			LastCompactionAt:  time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC),
-			ForceFreshThread:  true,
-			RecoveryState:     "resumed",
+			ThreadID:             "thr_123",
+			Model:                "gpt-5.4",
+			Provider:             "codex",
+			ThinkingMode:         "medium",
+			FastEnabled:          false,
+			LastUserMessageAt:    time.Date(2026, time.April, 13, 10, 15, 0, 0, time.UTC),
+			LastCompactionAt:     time.Date(2026, time.April, 13, 10, 45, 0, 0, time.UTC),
+			ForceFreshThread:     true,
+			RecoveryState:        "resumed",
+			ActiveAccountAlias:   "alpha",
+			AccountHealth:        "healthy",
+			TelemetryFresh:       true,
+			FiveHourRemainingPct: 88,
+			WeeklyRemainingPct:   91,
+			SwitchTrigger:        "soft_threshold_5h",
 		},
 	}
 	al := NewAgentLoop(cfg, msgBus, provider)
@@ -1196,6 +1202,9 @@ func TestAgentLoop_BuildCommandsRuntime_UsesInteractiveRuntimeController(t *test
 	}
 	if !status.ForceFreshThread {
 		t.Fatal("ReadStatus() force_fresh_thread = false, want true")
+	}
+	if status.ActiveAccountAlias != "alpha" || status.AccountHealth != "healthy" || !status.TelemetryFresh || status.FiveHourRemainingPct != 88 || status.WeeklyRemainingPct != 91 || status.SwitchTrigger != "soft_threshold_5h" {
+		t.Fatalf("ReadStatus() account fields = %#v, want projected account metadata", status)
 	}
 
 	oldModel, err := rt.SetModel("gpt-5.4-mini")
@@ -1367,16 +1376,16 @@ func TestAgentLoop_InteractiveProviderBootstrapsFreshThreadFromHistory(t *testin
 	if !interactiveCalled || len(reqs) != 2 {
 		t.Fatalf("interactive provider requests = %d, want 2", len(reqs))
 	}
-	if reqs[0].BootstrapInput != "" {
-		t.Fatalf("first request bootstrap_input = %q, want empty for existing thread", reqs[0].BootstrapInput)
+	if reqs[0].RecoveryBootstrapInput != "" {
+		t.Fatalf("first request recovery_bootstrap_input = %q, want empty for existing thread", reqs[0].RecoveryBootstrapInput)
 	}
 
-	wantBootstrap := buildInteractiveBootstrapInput(reqs[1].Messages, 3)
+	wantBootstrap := "USER: first question\nASSISTANT: first reply\nUSER: second question"
 	if wantBootstrap == "" {
-		t.Fatal("want bootstrap_input to be populated from history")
+		t.Fatal("want recovery_bootstrap_input to be populated from raw history")
 	}
-	if reqs[1].BootstrapInput != wantBootstrap {
-		t.Fatalf("bootstrap_input = %q, want %q", reqs[1].BootstrapInput, wantBootstrap)
+	if reqs[1].RecoveryBootstrapInput != wantBootstrap {
+		t.Fatalf("recovery_bootstrap_input = %q, want %q", reqs[1].RecoveryBootstrapInput, wantBootstrap)
 	}
 }
 
@@ -1430,9 +1439,9 @@ func TestAgentLoop_InteractiveProviderForcesFreshThreadAfterInactivity(t *testin
 		t.Fatal("request force_fresh_thread = false, want true after inactivity")
 	}
 
-	wantBootstrap := buildInteractiveBootstrapInput(reqs[0].Messages, 3)
-	if reqs[0].BootstrapInput != wantBootstrap {
-		t.Fatalf("bootstrap_input = %q, want %q", reqs[0].BootstrapInput, wantBootstrap)
+	wantBootstrap := "USER: wake the thread back up"
+	if reqs[0].RecoveryBootstrapInput != wantBootstrap {
+		t.Fatalf("recovery_bootstrap_input = %q, want %q", reqs[0].RecoveryBootstrapInput, wantBootstrap)
 	}
 
 	provider.mu.Lock()
@@ -1492,9 +1501,9 @@ func TestAgentLoop_InteractiveProviderHonorsRuntimeForceFreshSignal(t *testing.T
 	if !reqs[0].Control.ForceFreshThread {
 		t.Fatal("request force_fresh_thread = false, want true from runtime status")
 	}
-	wantBootstrap := buildInteractiveBootstrapInput(reqs[0].Messages, 3)
-	if reqs[0].BootstrapInput != wantBootstrap {
-		t.Fatalf("bootstrap_input = %q, want %q", reqs[0].BootstrapInput, wantBootstrap)
+	wantBootstrap := "USER: runtime says start fresh"
+	if reqs[0].RecoveryBootstrapInput != wantBootstrap {
+		t.Fatalf("recovery_bootstrap_input = %q, want %q", reqs[0].RecoveryBootstrapInput, wantBootstrap)
 	}
 
 	provider.mu.Lock()
@@ -1590,8 +1599,8 @@ func TestAgentLoop_InteractiveProviderCompactsExistingThreadBeforeTurn(t *testin
 	if reqs[0].Control.ForceFreshThread {
 		t.Fatal("request force_fresh_thread = true, want false for recent activity")
 	}
-	if reqs[0].BootstrapInput != "" {
-		t.Fatalf("bootstrap_input = %q, want empty for reused thread", reqs[0].BootstrapInput)
+	if reqs[0].RecoveryBootstrapInput != "" {
+		t.Fatalf("recovery_bootstrap_input = %q, want empty for reused thread", reqs[0].RecoveryBootstrapInput)
 	}
 
 	provider.mu.Lock()

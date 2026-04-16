@@ -105,6 +105,20 @@ func formatStatusSnapshot(status StatusSnapshot) string {
 	if status.RecoveryState != "" {
 		lines = append(lines, fmt.Sprintf("Recovery state: %s", status.RecoveryState))
 	}
+	if hasAccountStatus(status) {
+		if status.ActiveAccountAlias != "" {
+			lines = append(lines, fmt.Sprintf("Active account: %s", status.ActiveAccountAlias))
+		}
+		if status.AccountHealth != "" {
+			lines = append(lines, fmt.Sprintf("Account health: %s", status.AccountHealth))
+		}
+		lines = append(lines, fmt.Sprintf("Telemetry fresh: %s", yesNo(status.TelemetryFresh)))
+		lines = append(lines, fmt.Sprintf("5h remaining: %d%%", status.FiveHourRemainingPct))
+		lines = append(lines, fmt.Sprintf("Weekly remaining: %d%%", status.WeeklyRemainingPct))
+		if status.SwitchTrigger != "" {
+			lines = append(lines, fmt.Sprintf("Switch trigger: %s", status.SwitchTrigger))
+		}
+	}
 	if !status.LastUserMessageAt.IsZero() {
 		lines = append(lines, fmt.Sprintf("Last user message: %s", formatStatusTime(status.LastUserMessageAt)))
 	}
@@ -122,4 +136,20 @@ func formatStatusSnapshot(status StatusSnapshot) string {
 
 func formatStatusTime(ts time.Time) string {
 	return ts.UTC().Format("2006-01-02 15:04 UTC")
+}
+
+func hasAccountStatus(status StatusSnapshot) bool {
+	return status.ActiveAccountAlias != "" ||
+		status.AccountHealth != "" ||
+		status.TelemetryFresh ||
+		status.FiveHourRemainingPct != 0 ||
+		status.WeeklyRemainingPct != 0 ||
+		status.SwitchTrigger != ""
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
 }

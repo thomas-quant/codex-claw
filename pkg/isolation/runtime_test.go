@@ -141,23 +141,26 @@ func TestBuildLinuxMountPlan(t *testing.T) {
 func TestBuildWindowsAccessRules(t *testing.T) {
 	rules := BuildWindowsAccessRules(
 		`C:\codex-claw`,
-		[]config.ExposePath{{Source: `D:\data`, Target: `C:\mapped`, Mode: "ro"}},
+		[]config.ExposePath{
+			{Source: `C:\codex-claw`, Target: `C:\codex-claw`, Mode: "ro"},
+			{Source: `D:\data`, Target: `D:\data`, Mode: "ro"},
+		},
 	)
 	if len(rules) == 0 {
 		t.Fatal("BuildWindowsAccessRules returned empty rules")
 	}
-	foundRoot := false
+	rootRules := 0
 	foundOverride := false
 	for _, rule := range rules {
 		if rule.Path == `C:\codex-claw` && rule.Mode == "rw" {
-			foundRoot = true
+			rootRules++
 		}
 		if rule.Path == `D:\data` && rule.Mode == "ro" {
 			foundOverride = true
 		}
 	}
-	if !foundRoot {
-		t.Fatal("BuildWindowsAccessRules missing root rule")
+	if rootRules != 1 {
+		t.Fatalf("BuildWindowsAccessRules root rule count = %d, want 1", rootRules)
 	}
 	if !foundOverride {
 		t.Fatal("BuildWindowsAccessRules missing override rule")
@@ -168,9 +171,31 @@ func TestValidateWindowsExposePaths(t *testing.T) {
 	if err := validateWindowsExposePaths(nil); err != nil {
 		t.Fatalf("validateWindowsExposePaths(nil) error = %v", err)
 	}
-	err := validateWindowsExposePaths([]config.ExposePath{{Source: `D:\data`, Target: `D:\data`, Mode: "ro"}})
+	if err := validateWindowsExposePaths([]config.ExposePath{{Source: `D:\Data`, Target: `d:\data`, Mode: "ro"}}); err != nil {
+		t.Fatalf("validateWindowsExposePaths(identity) error = %v", err)
+	}
+	err := validateWindowsExposePaths([]config.ExposePath{{Source: `D:\data`, Target: `C:\mapped`, Mode: "ro"}})
 	if err == nil {
-		t.Fatal("validateWindowsExposePaths() expected error for expose_paths")
+		t.Fatal("validateWindowsExposePaths() expected remap error")
+	}
+}
+
+func TestBuildWindowsWritablePaths(t *testing.T) {
+	got := BuildWindowsWritablePaths([]AccessRule{
+		{Path: `C:\codex-claw`, Mode: "rw"},
+		{Path: `C:\codex-claw\logs`, Mode: "rw"},
+		{Path: `D:\shared`, Mode: "rw"},
+		{Path: `D:\shared\cache`, Mode: "rw"},
+		{Path: `E:\readonly`, Mode: "ro"},
+	})
+	want := []string{`C:\codex-claw`, `D:\shared`}
+	if len(got) != len(want) {
+		t.Fatalf("BuildWindowsWritablePaths() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("BuildWindowsWritablePaths()[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

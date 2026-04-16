@@ -147,13 +147,13 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsBootstrapInput(t *tes
 			{Role: "assistant", Content: "reply"},
 			{Role: "user", Content: "current"},
 		},
-		BootstrapInput: "SYSTEM\nUSER:first\nASSISTANT:reply\nUSER:current",
+		RecoveryBootstrapInput: "USER:first\nASSISTANT:reply\nUSER:current",
 	})
 	if err != nil {
 		t.Fatalf("RunInteractiveTurn() error = %v", err)
 	}
 
-	if runner.gotReq.InputText != "SYSTEM\nUSER:first\nASSISTANT:reply\nUSER:current" {
+	if runner.gotReq.InputText != "USER:first\nASSISTANT:reply\nUSER:current" {
 		t.Fatalf("RunInteractiveTurn() input_text = %q, want bootstrap payload", runner.gotReq.InputText)
 	}
 }
@@ -171,10 +171,10 @@ func TestCodexAppServerProvider_RunInteractiveTurn_PreservesBootstrapInputVerbat
 
 	bootstrapInput := "  USER:current\n\n"
 	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
-		SessionKey:     "session-1",
-		AgentID:        "agent-7",
-		Model:          "gpt-5.4",
-		BootstrapInput: bootstrapInput,
+		SessionKey:             "session-1",
+		AgentID:                "agent-7",
+		Model:                  "gpt-5.4",
+		RecoveryBootstrapInput: bootstrapInput,
 	})
 	if err != nil {
 		t.Fatalf("RunInteractiveTurn() error = %v", err)
@@ -468,6 +468,51 @@ func TestCodexAppServerProvider_ReadThreadStatus_ProjectsContinuityFields(t *tes
 	}
 	if runner.readStatusBindingKey != "session-1:agent-7" {
 		t.Fatalf("ReadThreadStatus() binding_key = %q, want %q", runner.readStatusBindingKey, "session-1:agent-7")
+	}
+}
+
+func TestCodexAppServerProvider_ReadThreadStatus_ProjectsAccountFields(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		status: codexruntime.RuntimeStatusSnapshot{
+			ThreadID:             "thr_1",
+			Model:                "gpt-5.4",
+			ActiveAccountAlias:   "alpha",
+			AccountHealth:        "healthy",
+			TelemetryFresh:       true,
+			FiveHourRemainingPct: 88,
+			WeeklyRemainingPct:   91,
+			SwitchTrigger:        "soft_threshold_5h",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	status, err := provider.ReadThreadStatus(context.Background(), InteractiveThreadControlRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+	})
+	if err != nil {
+		t.Fatalf("ReadThreadStatus() error = %v", err)
+	}
+
+	if status.ActiveAccountAlias != "alpha" {
+		t.Fatalf("ReadThreadStatus() active_account_alias = %q, want %q", status.ActiveAccountAlias, "alpha")
+	}
+	if status.AccountHealth != "healthy" {
+		t.Fatalf("ReadThreadStatus() account_health = %q, want %q", status.AccountHealth, "healthy")
+	}
+	if !status.TelemetryFresh {
+		t.Fatal("ReadThreadStatus() telemetry_fresh = false, want true")
+	}
+	if status.FiveHourRemainingPct != 88 {
+		t.Fatalf("ReadThreadStatus() five_hour_remaining_pct = %d, want %d", status.FiveHourRemainingPct, 88)
+	}
+	if status.WeeklyRemainingPct != 91 {
+		t.Fatalf("ReadThreadStatus() weekly_remaining_pct = %d, want %d", status.WeeklyRemainingPct, 91)
+	}
+	if status.SwitchTrigger != "soft_threshold_5h" {
+		t.Fatalf("ReadThreadStatus() switch_trigger = %q, want %q", status.SwitchTrigger, "soft_threshold_5h")
 	}
 }
 

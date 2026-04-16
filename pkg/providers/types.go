@@ -81,33 +81,40 @@ type InteractiveModelInfo struct {
 }
 
 type InteractiveThreadStatus struct {
-	ThreadID          string
-	Model             string
-	Provider          string
-	ThinkingMode      string
-	FastEnabled       bool
-	RecoveryState     string
-	LastUserMessageAt time.Time
-	LastCompactionAt  time.Time
-	ForceFreshThread  bool
+	ThreadID             string
+	Model                string
+	Provider             string
+	ThinkingMode         string
+	FastEnabled          bool
+	RecoveryState        string
+	LastUserMessageAt    time.Time
+	LastCompactionAt     time.Time
+	ForceFreshThread     bool
+	ActiveAccountAlias   string
+	AccountHealth        string
+	TelemetryFresh       bool
+	FiveHourRemainingPct int
+	WeeklyRemainingPct   int
+	SwitchTrigger        string
 }
 
 // InteractiveTurnRequest carries the provider-layer state needed to execute
 // a stateful interactive turn without changing the base LLMProvider interface.
 type InteractiveTurnRequest struct {
-	SessionKey     string
-	AgentID        string
-	Channel        string
-	ChatID         string
-	Model          string
-	Messages       []Message
-	Tools          []ToolDefinition
-	Options        map[string]any
-	BootstrapInput string
-	Recovery       InteractiveRecoveryRequest
-	Control        InteractiveControlRequest
-	OnChunk        func(string)
-	ExecuteTool    InteractiveToolExecutor
+	SessionKey             string
+	AgentID                string
+	Channel                string
+	ChatID                 string
+	Model                  string
+	Messages               []Message
+	Tools                  []ToolDefinition
+	Options                map[string]any
+	BootstrapInput         string
+	RecoveryBootstrapInput string
+	Recovery               InteractiveRecoveryRequest
+	Control                InteractiveControlRequest
+	OnChunk                func(string)
+	ExecuteTool            InteractiveToolExecutor
 }
 
 // InteractiveProvider is an optional capability for providers that manage a

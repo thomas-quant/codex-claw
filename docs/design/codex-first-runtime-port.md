@@ -228,7 +228,7 @@ If the app-server fails mid-run or on resume:
 1. restart the app-server once
 2. attempt `thread/resume` once
 3. if resume still fails, create a fresh Codex thread
-4. seed that fresh thread from the last 3 turns from codex-claw session history
+4. seed that fresh thread from the last 5 complete turns from codex-claw session history, per `.planning/superpowers/specs/2026-04-16-codex-continuity-handoff-and-compaction-contract-design.md`
 
 Normal restarts and channel reconnects should resume the existing binding whenever possible.
 

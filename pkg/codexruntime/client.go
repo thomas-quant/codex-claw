@@ -157,6 +157,24 @@ func (c *Client) Restart(ctx context.Context) error {
 	return c.Start(ctx)
 }
 
+func (c *Client) ReadAccount(ctx context.Context, refreshToken bool) (AccountSnapshot, error) {
+	var raw map[string]any
+	if err := c.Call(ctx, MethodAccountRead, AccountReadParams{RefreshToken: refreshToken}, &raw); err != nil {
+		return AccountSnapshot{}, err
+	}
+
+	return parseAccountReadResult(raw, time.Now().UTC())
+}
+
+func (c *Client) ReadRateLimits(ctx context.Context) ([]RateLimitSnapshot, error) {
+	var raw map[string]any
+	if err := c.Call(ctx, MethodAccountRateLimitsRead, map[string]any{}, &raw); err != nil {
+		return nil, err
+	}
+
+	return parseRateLimitsResult(raw, time.Now().UTC())
+}
+
 func (c *Client) ListModels(ctx context.Context) ([]ModelCatalogEntry, error) {
 	var result ModelListResult
 	if err := c.Call(ctx, MethodModelList, ModelListParams{}, &result); err != nil {

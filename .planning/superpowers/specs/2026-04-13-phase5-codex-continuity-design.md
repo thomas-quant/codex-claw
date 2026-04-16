@@ -146,7 +146,7 @@ Keep verification narrow and policy-focused.
 Required coverage:
 
 - new-thread bootstrap uses local session context instead of only the last user message
-- resume failure performs one restart, one retry, then fresh-thread seed from last 3 turns
+- resume failure performs one restart, one retry, then fresh-thread handoff from the last 5 complete turns, per `.planning/superpowers/specs/2026-04-16-codex-continuity-handoff-and-compaction-contract-design.md`
 - inactivity greater than 8 hours forces fresh-thread rollover
 - runtime settings survive rollover and `/reset`
 - proactive native compaction triggers only between turns

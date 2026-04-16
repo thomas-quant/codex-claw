@@ -263,3 +263,11 @@ func parseDigits(s string) int {
 	}
 	return n
 }
+
+func IsCodexUsageExhausted(err error) bool {
+	failErr := ClassifyError(err, "codex", "")
+	if failErr == nil {
+		return false
+	}
+	return failErr.Reason == FailoverRateLimit || failErr.Reason == FailoverBilling
+}

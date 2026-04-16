@@ -46,7 +46,7 @@ Isolation lives under:
 Field meanings:
 
 - `enabled`: enables or disables subprocess isolation. Default: `false`.
-- `expose_paths`: explicitly exposes host paths inside the isolated environment. It only matters when `enabled=true`. This is currently supported on Linux only.
+- `expose_paths`: explicitly exposes host paths inside the isolated environment. It only matters when `enabled=true`. Linux supports `source -> target` remaps; Windows accepts same-path rules only and rejects remapped targets.
 
 Example:
 
@@ -82,7 +82,7 @@ Rules for `expose_paths`:
 Platform note:
 
 - Linux uses a real `source -> target` mount view.
-- Windows does not currently support `expose_paths`.
+- Windows accepts `expose_paths` only when `source` and `target` resolve to the same path.
 
 ## Instance Root And Directories
 
@@ -173,9 +173,9 @@ Disabling isolation increases the risk that child processes can access or modify
 
 ### Windows
 
-Windows isolation currently supports process-level restrictions such as restricted tokens, low integrity, job objects, and redirected user-environment directories.
+Windows isolation currently supports process-level restrictions such as restricted tokens, low integrity, job objects, redirected user-environment directories, and same-path `expose_paths` rules.
 
-`expose_paths` is not currently supported on Windows. If it is configured, startup should fail instead of pretending the paths were exposed.
+Windows still rejects remapped `expose_paths` targets. If `source` and `target` do not resolve to the same host path, startup should fail instead of pretending a remap was applied.
 
 The Windows backend currently uses:
 

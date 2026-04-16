@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	pathpkg "path"
 	"runtime"
 	"strings"
 	"sync"
@@ -290,18 +291,85 @@ func BuildLinuxMountPlan(root string, overrides []config.ExposePath) []MountRule
 func BuildWindowsAccessRules(root string, overrides []config.ExposePath) []AccessRule {
 	merged := MergeExposePaths(nil, overrides)
 	rules := make([]AccessRule, 0, len(merged)+1)
-	rules = append(rules, AccessRule{Path: root, Mode: "rw"})
+	rules = append(rules, AccessRule{Path: normalizeWindowsPath(root), Mode: "rw"})
+	seen := map[string]struct{}{
+		windowsPathKey(root): {},
+	}
 	for _, item := range merged {
-		rules = append(rules, AccessRule{Path: item.Source, Mode: item.Mode})
+		source := normalizeWindowsPath(item.Source)
+		key := windowsPathKey(source)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		rules = append(rules, AccessRule{Path: source, Mode: item.Mode})
 	}
 	return rules
 }
 
 func validateWindowsExposePaths(items []config.ExposePath) error {
-	if len(items) == 0 {
-		return nil
+	for _, item := range items {
+		normalized := NormalizeExposePath(item)
+		if !windowsPathEqual(normalized.Source, normalized.Target) {
+			return fmt.Errorf(
+				"windows isolation does not support remapped expose_paths targets: %s -> %s",
+				normalized.Source,
+				normalized.Target,
+			)
+		}
 	}
-	return fmt.Errorf("windows isolation does not yet support expose_paths filesystem rules")
+	return nil
+}
+
+// BuildWindowsWritablePaths compacts overlapping writable rules so the backend
+// can touch the minimum number of path roots when preparing low-integrity
+// access for an isolated process.
+func BuildWindowsWritablePaths(rules []AccessRule) []string {
+	roots := make([]string, 0, len(rules))
+	for _, rule := range rules {
+		if rule.Mode != "rw" || rule.Path == "" {
+			continue
+		}
+		path := normalizeWindowsPath(rule.Path)
+		covered := false
+		for _, root := range roots {
+			if windowsPathWithin(path, root) {
+				covered = true
+				break
+			}
+		}
+		if covered {
+			continue
+		}
+		roots = append(roots, path)
+	}
+	return roots
+}
+
+func windowsPathEqual(left string, right string) bool {
+	return windowsPathKey(left) == windowsPathKey(right)
+}
+
+func windowsPathWithin(path string, root string) bool {
+	pathKey := windowsPathKey(path)
+	rootKey := strings.TrimSuffix(windowsPathKey(root), `\`)
+	if pathKey == rootKey {
+		return true
+	}
+	return strings.HasPrefix(pathKey, rootKey+`\`)
+}
+
+func windowsPathKey(path string) string {
+	return strings.ToLower(strings.TrimSuffix(normalizeWindowsPath(path), `\`))
+}
+
+func normalizeWindowsPath(path string) string {
+	normalized := strings.ReplaceAll(path, `\`, "/")
+	cleaned := pathpkg.Clean(normalized)
+	if len(cleaned) == 2 && cleaned[1] == ':' && strings.HasSuffix(normalized, "/") {
+		cleaned += "/"
+	}
+	return strings.ReplaceAll(cleaned, "/", `\`)
 }
 
 // IsSupported reports whether the current platform has an implemented isolation

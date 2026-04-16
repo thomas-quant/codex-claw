@@ -339,8 +339,8 @@ func TestDefaultConfig_WorkspacePath(t *testing.T) {
 func TestDefaultConfig_MaxTokens(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Agents.Defaults.MaxTokens == 0 {
-		t.Error("MaxTokens should not be zero")
+	if cfg.Agents.Defaults.MaxTokens != 128000 {
+		t.Fatalf("DefaultConfig().Agents.Defaults.MaxTokens = %d, want %d", cfg.Agents.Defaults.MaxTokens, 128000)
 	}
 }
 

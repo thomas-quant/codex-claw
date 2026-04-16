@@ -35,6 +35,26 @@ Runtime defaults live in `runtime.codex`:
 
 Codex authentication is external. The app starts `codex app-server` inside an already-authenticated shell and does not read Codex credentials from config.
 
+### Dedicated Codex Home And Account Switching
+
+The Codex provider always launches `codex app-server` with:
+
+```text
+CODEX_HOME=<CODEX_CLAW_HOME>/codex-home
+```
+
+That dedicated live home is separate from the saved account snapshots under `CODEX_CLAW_HOME/codex-accounts/accounts/`.
+
+When multiple Codex accounts are configured, the coordinator wraps the app-server runtime:
+
+- it refreshes fresh Codex account telemetry before making a soft-switch decision, including the `account/read` and `account/rateLimits/read` runtime surface, with rate-limit headroom driving the actual switch choice
+- it refreshes Codex account telemetry before making a soft-switch decision, including the `account/read` and `account/rateLimits/read` runtime surface, with rate-limit headroom driving the actual switch choice
+- it only switches between turns; auth is not swapped in the middle of a running turn
+- after a swap, it tries same-thread resume first so the current conversation can continue on the new account
+- if same-thread recovery cannot continue safely, the fresh-thread fallback seeds the next request from the last five raw turns
+
+Usage exhaustion can still force a hard switch after a failed turn. That path follows the same rule: swap at the turn boundary, try same-thread recovery first, then fall back to a fresh thread when needed.
+
 ## DeepSeek Fallback
 
 DeepSeek is configured only through the runtime fallback block:

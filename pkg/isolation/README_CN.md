@@ -46,7 +46,7 @@
 字段说明：
 
 - `enabled`：是否启用子进程隔离。默认值：`false`。
-- `expose_paths`：显式把宿主路径带入隔离环境。仅在 `enabled=true` 时生效。目前只在 Linux 上支持。
+- `expose_paths`：显式把宿主路径带入隔离环境。仅在 `enabled=true` 时生效。Linux 支持 `source -> target` 重映射；Windows 只接受源路径与目标路径相同的规则，并拒绝重映射目标。
 
 示例：
 
@@ -82,7 +82,7 @@
 平台说明：
 
 - Linux 会真实使用 `source -> target` 挂载视图。
-- Windows 当前不支持 `expose_paths`。
+- Windows 仅在 `source` 与 `target` 解析到同一路径时接受 `expose_paths`。
 
 ## 实例根与目录
 
@@ -173,9 +173,9 @@ Linux 后端当前依赖 `bwrap`（`bubblewrap`）。
 
 ### Windows
 
-Windows 隔离当前提供的是进程级限制，例如 restricted token、low integrity、job object，以及用户环境目录重定向。
+Windows 隔离当前提供的是进程级限制，例如 restricted token、low integrity、job object、用户环境目录重定向，以及同路径的 `expose_paths` 规则。
 
-`expose_paths` 目前不支持 Windows。如果配置了该字段，启动应直接失败，而不是假装这些路径已经被暴露进隔离环境。
+Windows 仍然拒绝重映射的 `expose_paths` 目标。如果 `source` 与 `target` 解析后不是同一路径，启动应直接失败，而不是假装重映射已经生效。
 
 Windows 后端当前使用：
 

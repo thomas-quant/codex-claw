@@ -57,7 +57,10 @@ func (p *CodexAppServerProvider) RunInteractiveTurn(
 		return nil, fmt.Errorf("codex app server runner not configured")
 	}
 
-	inputText := req.BootstrapInput
+	inputText := req.RecoveryBootstrapInput
+	if inputText == "" {
+		inputText = req.BootstrapInput
+	}
 	if inputText == "" {
 		inputText = lastUserMessageContent(req.Messages)
 	}
@@ -148,15 +151,21 @@ func (p *CodexAppServerProvider) ReadThreadStatus(ctx context.Context, req Inter
 	}
 
 	return InteractiveThreadStatus{
-		ThreadID:          status.ThreadID,
-		Model:             status.Model,
-		Provider:          "codex",
-		ThinkingMode:      status.ThinkingMode,
-		FastEnabled:       status.FastEnabled,
-		RecoveryState:     status.Recovery.Mode,
-		LastUserMessageAt: status.LastUserMessageAt,
-		LastCompactionAt:  status.LastCompactionAt,
-		ForceFreshThread:  status.ForceFreshThread,
+		ThreadID:             status.ThreadID,
+		Model:                status.Model,
+		Provider:             "codex",
+		ThinkingMode:         status.ThinkingMode,
+		FastEnabled:          status.FastEnabled,
+		RecoveryState:        status.Recovery.Mode,
+		LastUserMessageAt:    status.LastUserMessageAt,
+		LastCompactionAt:     status.LastCompactionAt,
+		ForceFreshThread:     status.ForceFreshThread,
+		ActiveAccountAlias:   status.ActiveAccountAlias,
+		AccountHealth:        status.AccountHealth,
+		TelemetryFresh:       status.TelemetryFresh,
+		FiveHourRemainingPct: status.FiveHourRemainingPct,
+		WeeklyRemainingPct:   status.WeeklyRemainingPct,
+		SwitchTrigger:        status.SwitchTrigger,
 	}, nil
 }
 

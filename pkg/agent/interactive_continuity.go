@@ -65,6 +65,29 @@ func buildInteractiveBootstrapInput(messages []providers.Message, recentTurns in
 	return strings.TrimSpace(b.String())
 }
 
+func buildInteractiveRecoveryBootstrapInput(history []providers.Message, recentTurns int) string {
+	if len(history) == 0 || recentTurns <= 0 {
+		return ""
+	}
+
+	start := findRecentTurnStart(history, recentTurns)
+	if start < 0 || start >= len(history) {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, msg := range history[start:] {
+		role := strings.ToUpper(strings.TrimSpace(msg.Role))
+		content := strings.TrimSpace(msg.Content)
+		if role == "" || content == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "%s: %s\n", role, content)
+	}
+
+	return strings.TrimSpace(b.String())
+}
+
 func findRecentTurnStart(messages []providers.Message, recentTurns int) int {
 	if len(messages) == 0 {
 		return 0

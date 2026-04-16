@@ -60,3 +60,40 @@ func TestBuildRuntimeStatusMergesBindingAndLiveState(t *testing.T) {
 		t.Fatalf("KnownModels len = %d, want %d", len(status.KnownModels), 2)
 	}
 }
+
+func TestBuildRuntimeStatusProjectsAccountMetadata(t *testing.T) {
+	t.Parallel()
+
+	status := BuildRuntimeStatus(RuntimeStatusInput{
+		Binding: Binding{
+			Key: "telegram:chat-1:agent-coder",
+		},
+		Client: ClientStatus{
+			ActiveAccountAlias:   "alpha",
+			AccountHealth:        "healthy",
+			TelemetryFresh:       true,
+			FiveHourRemainingPct: 88,
+			WeeklyRemainingPct:   91,
+			SwitchTrigger:        "soft_threshold_5h",
+		},
+	})
+
+	if status.ActiveAccountAlias != "alpha" {
+		t.Fatalf("ActiveAccountAlias = %q, want %q", status.ActiveAccountAlias, "alpha")
+	}
+	if status.AccountHealth != "healthy" {
+		t.Fatalf("AccountHealth = %q, want %q", status.AccountHealth, "healthy")
+	}
+	if !status.TelemetryFresh {
+		t.Fatal("TelemetryFresh = false, want true")
+	}
+	if status.FiveHourRemainingPct != 88 {
+		t.Fatalf("FiveHourRemainingPct = %d, want %d", status.FiveHourRemainingPct, 88)
+	}
+	if status.WeeklyRemainingPct != 91 {
+		t.Fatalf("WeeklyRemainingPct = %d, want %d", status.WeeklyRemainingPct, 91)
+	}
+	if status.SwitchTrigger != "soft_threshold_5h" {
+		t.Fatalf("SwitchTrigger = %q, want %q", status.SwitchTrigger, "soft_threshold_5h")
+	}
+}

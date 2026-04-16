@@ -78,6 +78,31 @@ func TestBuildInteractiveBootstrapInput_NormalizesRoleFormatting(t *testing.T) {
 	}
 }
 
+func TestBuildInteractiveRecoveryBootstrapInput_UsesLastFiveRawTurns(t *testing.T) {
+	history := []providers.Message{
+		{Role: "user", Content: "q1"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "user", Content: "q2"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "user", Content: "q3"},
+		{Role: "assistant", Content: "a3"},
+		{Role: "user", Content: "q4"},
+		{Role: "assistant", Content: "a4"},
+		{Role: "user", Content: "q5"},
+		{Role: "assistant", Content: "a5"},
+		{Role: "user", Content: "q6"},
+	}
+
+	got := buildInteractiveRecoveryBootstrapInput(history, 5)
+	want := "USER: q2\nASSISTANT: a2\nUSER: q3\nASSISTANT: a3\nUSER: q4\nASSISTANT: a4\nUSER: q5\nASSISTANT: a5\nUSER: q6"
+	if got != want {
+		t.Fatalf("buildInteractiveRecoveryBootstrapInput() = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "q1") || strings.Contains(got, "a1") {
+		t.Fatalf("buildInteractiveRecoveryBootstrapInput() kept older raw turns: %q", got)
+	}
+}
+
 func TestShouldForceFreshInteractiveThread_WhenInactiveForOverEightHours(t *testing.T) {
 	now := time.Date(2026, time.April, 13, 12, 0, 0, 0, time.UTC)
 	lastUserMessageAt := now.Add(-9 * time.Hour)

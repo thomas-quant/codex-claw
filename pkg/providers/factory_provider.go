@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thomas-quant/codex-claw/pkg/codexaccounts"
 	"github.com/thomas-quant/codex-claw/pkg/codexruntime"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 )
@@ -57,15 +58,26 @@ var protocolMetaByName = map[string]protocolMeta{
 	"novita":                   {defaultAPIBase: "https://api.novita.ai/openai"},
 }
 
-var newCodexAppServerRunner = func(workspace string, requestTimeoutSeconds int) codexAppServerRunner {
-	bindings := codexruntime.NewBindingStore(filepath.Join(workspace, "codex"))
-	client := codexruntime.NewStdIOClient(
+var newCodexRunnerClient = func(workspace string, requestTimeoutSeconds int, envOverrides map[string]string) codexruntime.RunnerClient {
+	return codexruntime.NewStdIOClient(
 		"codex",
 		[]string{"app-server", "--listen", "stdio://"},
 		workspace,
 		time.Duration(requestTimeoutSeconds)*time.Second,
+		envOverrides,
 	)
-	return codexruntime.NewRunner(client, bindings)
+}
+
+var newCodexAppServerRunner = func(workspace string, requestTimeoutSeconds int) codexAppServerRunner {
+	layout := codexaccounts.ResolveLayout(config.GetHome())
+	bindings := codexruntime.NewBindingStore(filepath.Join(workspace, "codex"))
+	client := newCodexRunnerClient(workspace, requestTimeoutSeconds, map[string]string{
+		"CODEX_HOME": layout.CodexHome,
+	})
+	base := codexruntime.NewRunner(client, bindings)
+	return codexaccounts.NewCoordinator(base, codexaccounts.NewStore(layout), codexaccounts.CoordinatorOptions{
+		IsUsageExhausted: IsCodexUsageExhausted,
+	})
 }
 
 // ExtractProtocol extracts the protocol prefix and model identifier from a model string.

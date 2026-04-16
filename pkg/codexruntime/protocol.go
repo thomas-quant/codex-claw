@@ -1,11 +1,16 @@
 package codexruntime
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 const (
 	MethodInitialize                          = "initialize"
 	MethodInitialized                         = "initialized"
 	MethodModelList                           = "model/list"
+	MethodAccountRead                         = "account/read"
+	MethodAccountRateLimitsRead               = "account/rateLimits/read"
 	MethodThreadStart                         = "thread/start"
 	MethodThreadCompactStart                  = "thread/compact/start"
 	MethodThreadCompacted                     = "thread/compacted"
@@ -55,6 +60,28 @@ type Notification struct {
 
 type InitializeParams struct {
 	ClientInfo map[string]any `json:"clientInfo,omitempty"`
+}
+
+type AccountReadParams struct {
+	RefreshToken bool `json:"refreshToken,omitempty"`
+}
+
+type AccountSnapshot struct {
+	Email      string    `json:"email,omitempty"`
+	PlanType   string    `json:"plan_type,omitempty"`
+	AuthMode   string    `json:"auth_mode,omitempty"`
+	ObservedAt time.Time `json:"observed_at,omitempty"`
+}
+
+type RateLimitSnapshot struct {
+	ID                   string    `json:"id,omitempty"`
+	Name                 string    `json:"name,omitempty"`
+	PlanType             string    `json:"plan_type,omitempty"`
+	PrimaryUsedPercent   *int      `json:"primary_used_percent,omitempty"`
+	SecondaryUsedPercent *int      `json:"secondary_used_percent,omitempty"`
+	PrimaryResetAt       time.Time `json:"primary_reset_at,omitempty"`
+	SecondaryResetAt     time.Time `json:"secondary_reset_at,omitempty"`
+	ObservedAt           time.Time `json:"observed_at,omitempty"`
 }
 
 type ThreadStartParams struct {

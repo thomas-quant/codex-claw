@@ -9,11 +9,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/account"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/agent"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cliui"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cron"
@@ -22,6 +24,7 @@ import (
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/skills"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/status"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/version"
+	"github.com/thomas-quant/codex-claw/pkg"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 	"github.com/thomas-quant/codex-claw/pkg/updater"
 )
@@ -80,6 +83,7 @@ codex-claw --no-color status`,
 	cmd.AddCommand(
 		onboard.NewOnboardCommand(),
 		agent.NewAgentCommand(),
+		account.NewAccountCommand(),
 		gateway.NewGatewayCommand(),
 		status.NewStatusCommand(),
 		cron.NewCronCommand(),
@@ -94,32 +98,22 @@ codex-claw --no-color status`,
 const (
 	colorBlue = "\033[1;38;2;62;93;185m"
 	colorRed  = "\033[1;38;2;213;70;70m"
-	banner    = "\r\n" +
-		colorBlue + "██████╗ ██╗ ██████╗ ██████╗ " + colorRed + " ██████╗██╗      █████╗ ██╗    ██╗\n" +
-		colorBlue + "██╔══██╗██║██╔════╝██╔═══██╗" + colorRed + "██╔════╝██║     ██╔══██╗██║    ██║\n" +
-		colorBlue + "██████╔╝██║██║     ██║   ██║" + colorRed + "██║     ██║     ███████║██║ █╗ ██║\n" +
-		colorBlue + "██╔═══╝ ██║██║     ██║   ██║" + colorRed + "██║     ██║     ██╔══██║██║███╗██║\n" +
-		colorBlue + "██║     ██║╚██████╗╚██████╔╝" + colorRed + "╚██████╗███████╗██║  ██║╚███╔███╔╝\n" +
-		colorBlue + "╚═╝     ╚═╝ ╚═════╝ ╚═════╝ " + colorRed + " ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝\n " +
-		"\033[0m\r\n"
-	plainBanner = "\r\n" +
-		"██████╗ ██╗ ██████╗ ██████╗  ██████╗██╗      █████╗ ██╗    ██╗\n" +
-		"██╔══██╗██║██╔════╝██╔═══██╗██╔════╝██║     ██╔══██╗██║    ██║\n" +
-		"██████╔╝██║██║     ██║   ██║██║     ██║     ███████║██║ █╗ ██║\n" +
-		"██╔═══╝ ██║██║     ██║   ██║██║     ██║     ██╔══██║██║███╗██║\n" +
-		"██║     ██║╚██████╗╚██████╔╝╚██████╗███████╗██║  ██║╚███╔███╔╝\n" +
-		"╚═╝     ╚═╝ ╚═════╝ ╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝\n " +
-		"\r\n"
+	colorReset = "\033[0m"
 )
 
-func main() {
-	cliui.Init(earlyColorDisabled())
-
-	if earlyColorDisabled() {
-		fmt.Print(plainBanner)
-	} else {
-		fmt.Printf("%s", banner)
+func startupBanner(noColor bool) string {
+	title := strings.ToUpper(pkg.AppName)
+	underline := strings.Repeat("=", len(title))
+	if noColor {
+		return fmt.Sprintf("\n%s\n%s\n\n", title, underline)
 	}
+	return fmt.Sprintf("\n%s%s%s\n%s%s%s\n\n", colorBlue, title, colorReset, colorRed, underline, colorReset)
+}
+
+func main() {
+	noColor := earlyColorDisabled()
+	cliui.Init(noColor)
+	fmt.Print(startupBanner(noColor))
 
 	tzEnv := os.Getenv("TZ")
 	if tzEnv != "" {

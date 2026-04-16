@@ -264,6 +264,19 @@ func TestClassifyError_UnknownError(t *testing.T) {
 	}
 }
 
+func TestIsCodexUsageExhausted_RecognizesUsageAndBillingStops(t *testing.T) {
+	tests := []error{
+		errors.New("usage limit reached"),
+		errors.New("insufficient balance"),
+	}
+
+	for _, err := range tests {
+		if !IsCodexUsageExhausted(err) {
+			t.Fatalf("IsCodexUsageExhausted(%q) = false, want true", err)
+		}
+	}
+}
+
 func TestClassifyError_ProviderModelPropagation(t *testing.T) {
 	err := errors.New("rate limit exceeded")
 	result := ClassifyError(err, "my-provider", "my-model")

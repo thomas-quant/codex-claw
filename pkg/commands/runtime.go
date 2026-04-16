@@ -16,15 +16,21 @@ type ModelInfo struct {
 // handlers. It stays small and presentation-oriented so the command package
 // does not need to know about codexruntime internals.
 type StatusSnapshot struct {
-	ThreadID          string
-	Model             string
-	Provider          string
-	ThinkingMode      string
-	FastEnabled       bool
-	LastUserMessageAt time.Time
-	LastCompactionAt  time.Time
-	ForceFreshThread  bool
-	RecoveryState     string
+	ThreadID             string
+	Model                string
+	Provider             string
+	ThinkingMode         string
+	FastEnabled          bool
+	LastUserMessageAt    time.Time
+	LastCompactionAt     time.Time
+	ForceFreshThread     bool
+	RecoveryState        string
+	ActiveAccountAlias   string
+	AccountHealth        string
+	TelemetryFresh       bool
+	FiveHourRemainingPct int
+	WeeklyRemainingPct   int
+	SwitchTrigger        string
 }
 
 // Runtime provides runtime dependencies to command handlers. It is constructed

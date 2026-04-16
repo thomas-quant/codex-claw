@@ -6,8 +6,14 @@ import (
 
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal/cliui"
+	"github.com/thomas-quant/codex-claw/pkg/codexaccounts"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 )
+
+type accountSummary struct {
+	total  int
+	active string
+}
 
 func statusCmd() {
 	cfg, err := internal.LoadConfig()
@@ -62,7 +68,34 @@ func statusCmd() {
 				Val:  val(cfg.Runtime.Fallback.DeepSeek.Enabled, cfg.Runtime.Fallback.DeepSeek.Model),
 			},
 		}
+		report.Providers = append(report.Providers, accountProviderRows(loadAccountSummary(internal.GetCodexClawHome()))...)
 	}
 
 	cliui.PrintStatus(report)
+}
+
+func loadAccountSummary(home string) accountSummary {
+	manager := codexaccounts.NewManager(codexaccounts.ResolveLayout(home), codexaccounts.ManagerOptions{})
+	summary, err := manager.Status(nil)
+	if err != nil {
+		return accountSummary{}
+	}
+	return accountSummary{
+		total:  summary.TotalAccounts,
+		active: summary.ActiveAlias,
+	}
+}
+
+func accountProviderRows(summary accountSummary) []cliui.ProviderRow {
+	rows := []cliui.ProviderRow{
+		{Name: "Codex accounts", Val: "not set"},
+		{Name: "Active account", Val: "not set"},
+	}
+	if summary.total > 0 {
+		rows[0].Val = fmt.Sprintf("✓ %d configured", summary.total)
+	}
+	if summary.active != "" {
+		rows[1].Val = "✓ " + summary.active
+	}
+	return rows
 }

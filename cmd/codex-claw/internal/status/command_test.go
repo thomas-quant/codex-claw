@@ -27,3 +27,18 @@ func TestNewStatusCommand(t *testing.T) {
 	assert.Nil(t, cmd.PersistentPreRun)
 	assert.Nil(t, cmd.PersistentPostRun)
 }
+
+func TestAccountProviderRows(t *testing.T) {
+	t.Parallel()
+
+	rows := accountProviderRows(accountSummary{
+		total:  2,
+		active: "alpha",
+	})
+
+	require.Len(t, rows, 2)
+	assert.Equal(t, "Codex accounts", rows[0].Name)
+	assert.Equal(t, "✓ 2 configured", rows[0].Val)
+	assert.Equal(t, "Active account", rows[1].Name)
+	assert.Equal(t, "✓ alpha", rows[1].Val)
+}

@@ -42,7 +42,7 @@ func DefaultConfig() *Config {
 			Defaults: AgentDefaults{
 				Workspace:                 workspacePath,
 				RestrictToWorkspace:       true,
-				MaxTokens:                 32768,
+				MaxTokens:                 128000,
 				Temperature:               nil, // nil means use provider default
 				MaxToolIterations:         50,
 				SummarizeMessageThreshold: 20,

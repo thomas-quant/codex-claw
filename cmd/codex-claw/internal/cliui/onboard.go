@@ -8,41 +8,34 @@ import (
 )
 
 // PrintOnboardComplete prints the post-onboard “ready” message and next steps.
-func PrintOnboardComplete(logo string, encrypt bool, configPath string) {
+func PrintOnboardComplete(logo string, encrypt bool, configPath, surface string, importedAuth bool) {
 	if !UseFancyLayout() {
-		printOnboardPlain(logo, encrypt, configPath)
+		printOnboardPlain(logo, encrypt, configPath, surface, importedAuth)
 		return
 	}
-	printOnboardFancy(logo, encrypt, configPath)
+	printOnboardFancy(logo, encrypt, configPath, surface, importedAuth)
 }
 
-func printOnboardPlain(logo string, encrypt bool, configPath string) {
+func printOnboardPlain(logo string, encrypt bool, configPath, surface string, importedAuth bool) {
 	fmt.Printf("\n%s codex-claw is ready!\n", logo)
 	fmt.Println("\nNext steps:")
-	if encrypt {
-		fmt.Println("  1. Set your encryption passphrase before starting codex-claw:")
-		fmt.Println("       export CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS")
-		fmt.Println("       set CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd")
-		fmt.Println("")
-		fmt.Println("  2. Review your runtime settings in", configPath)
-	} else {
-		fmt.Println("  1. Review your runtime settings in", configPath)
-	}
+	fmt.Println(indentForPlain(buildOnboardingSteps(encrypt, configPath, surface, importedAuth)))
 	fmt.Println("")
 	fmt.Println("     Recommended:")
-	fmt.Println("     - Start `codex app-server` from a shell where Codex is already authenticated")
+	if importedAuth {
+		fmt.Println("     - Managed live Codex auth is ready under `CODEX_CLAW_HOME/codex-home/auth.json`")
+	} else {
+		fmt.Println("     - Import existing Codex auth later with `codex-claw account import main --auth-file ~/.codex/auth.json`")
+		fmt.Println("     - Or start `codex app-server` from a shell where Codex is already authenticated")
+	}
 	fmt.Println("     - If you enable DeepSeek fallback, export `DEEPSEEK_API_KEY` in that shell")
 	fmt.Println("")
 	fmt.Println("     See `docs/providers.md` for the current runtime options.")
 	fmt.Println("")
-	if encrypt {
-		fmt.Println("  3. Chat: codex-claw agent -m \"Hello!\"")
-	} else {
-		fmt.Println("  2. Chat: codex-claw agent -m \"Hello!\"")
-	}
+	fmt.Println("  " + strings.ReplaceAll(chatStep(encrypt, surface), "\n", "\n  "))
 }
 
-func printOnboardFancy(logo string, encrypt bool, configPath string) {
+func printOnboardFancy(logo string, encrypt bool, configPath, surface string, importedAuth bool) {
 	inner := InnerWidth()
 	box := borderStyle().MaxWidth(inner + 8)
 
@@ -51,9 +44,9 @@ func printOnboardFancy(logo string, encrypt bool, configPath string) {
 	fmt.Println(box.Width(inner).Render(strings.TrimSpace(ready)))
 	fmt.Println()
 
-	steps := buildOnboardingSteps(encrypt, configPath)
-	rec := recommendedBlock()
-	chat := chatStep(encrypt)
+	steps := buildOnboardingSteps(encrypt, configPath, surface, importedAuth)
+	rec := recommendedBlock(importedAuth)
+	chat := chatStep(encrypt, surface)
 
 	if UseColumnLayout() {
 		leftW := min(inner/2-2, 52)
@@ -79,32 +72,60 @@ func printOnboardFancy(logo string, encrypt bool, configPath string) {
 	fmt.Println(borderStyle().Width(inner).Render(next))
 }
 
-func buildOnboardingSteps(encrypt bool, configPath string) string {
+func buildOnboardingSteps(encrypt bool, configPath, surface string, importedAuth bool) string {
 	var b strings.Builder
+	step := 1
 	if encrypt {
 		b.WriteString("1. Set your encryption passphrase before starting codex-claw:\n")
 		b.WriteString("   export CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>   # Linux/macOS\n")
 		b.WriteString("   set CODEX_CLAW_KEY_PASSPHRASE=<your-passphrase>      # Windows cmd\n\n")
-		b.WriteString("2. Review your runtime settings in\n   ")
-		b.WriteString(configPath)
-		b.WriteString("\n")
-	} else {
-		b.WriteString("1. Review your runtime settings in\n   ")
-		b.WriteString(configPath)
-		b.WriteString("\n")
+		step++
+	}
+	fmt.Fprintf(&b, "%d. Review your runtime settings in\n   %s\n\n", step, configPath)
+	step++
+	if surface != "" {
+		fmt.Fprintf(&b, "%d. Finish your %s setup in .security.yml\n", step, surface)
+		b.WriteString("   Add the matching bot token before starting the gateway.\n\n")
+		step++
+	}
+	if importedAuth {
+		fmt.Fprintf(&b, "%d. Managed live Codex auth imported into\n", step)
+		b.WriteString("   CODEX_CLAW_HOME/codex-home/auth.json\n")
 	}
 	return b.String()
 }
 
-func recommendedBlock() string {
-	return "• Start `codex app-server` from a shell where Codex is already authenticated\n\n" +
+func recommendedBlock(importedAuth bool) string {
+	if importedAuth {
+		return "• The managed live Codex home already has an auth snapshot\n\n" +
+			"• If you enable DeepSeek fallback, export `DEEPSEEK_API_KEY`\n\n" +
+			"See `docs/providers.md` for the current runtime options."
+	}
+	return "• Import an existing Codex auth later with `codex-claw account import`\n\n" +
+		"• Or start `codex app-server` from a shell where Codex is already authenticated\n\n" +
 		"• If you enable DeepSeek fallback, export `DEEPSEEK_API_KEY`\n\n" +
 		"See `docs/providers.md` for the current runtime options."
 }
 
-func chatStep(encrypt bool) string {
+func chatStep(encrypt bool, surface string) string {
+	step := 2
 	if encrypt {
-		return "3. Chat:\n   codex-claw agent -m \"Hello!\""
+		step++
 	}
-	return "2. Chat:\n   codex-claw agent -m \"Hello!\""
+	if surface != "" {
+		step++
+	}
+	action := "Chat"
+	if surface != "" {
+		action = fmt.Sprintf("Open your %s chat", surface)
+	}
+	return fmt.Sprintf("%d. %s:\n   codex-claw agent -m \"Hello!\"", step, action)
+}
+
+func indentForPlain(text string) string {
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = "  " + line
+	}
+	return strings.Join(lines, "\n")
 }

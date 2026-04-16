@@ -2032,7 +2032,7 @@ turnLoop:
 					map[string]any{"agent_id": ts.agent.ID, "thinking_level": string(ts.agent.ThinkingLevel)})
 			}
 		}
-		bootstrapInput := ""
+		recoveryBootstrapInput := ""
 		if al.hooks != nil {
 			llmReq, decision := al.hooks.BeforeLLM(turnCtx, &LLMHookRequest{
 				Meta:             ts.eventMeta("runTurn", "turn.llm.request"),
@@ -2061,8 +2061,11 @@ turnLoop:
 				return al.abortTurn(ts)
 			}
 		}
-		if shouldBootstrapFreshThread {
-			bootstrapInput = buildInteractiveBootstrapInput(callMessages, 3)
+		if shouldBootstrapFreshThread && !ts.opts.NoHistory {
+			recoveryBootstrapInput = buildInteractiveRecoveryBootstrapInput(
+				ts.agent.Sessions.GetHistory(ts.sessionKey),
+				5,
+			)
 		}
 		if haveInteractiveStatus && interactiveStatus.ThreadID != "" && !forceFreshThread {
 			threshold := al.cfg.Runtime.Codex.AutoCompactThresholdPercent
@@ -2188,9 +2191,9 @@ turnLoop:
 						AllowServerRestart: true,
 						AllowResume:        true,
 					},
-					BootstrapInput: bootstrapInput,
-					Control:        interactiveControl,
-					OnChunk:        onChunk,
+					RecoveryBootstrapInput: recoveryBootstrapInput,
+					Control:                interactiveControl,
+					OnChunk:                onChunk,
 					ExecuteTool: func(toolCtx context.Context, call providers.InteractiveToolCall) (providers.InteractiveToolResult, error) {
 						return al.executeInteractiveToolCall(toolCtx, ts, call)
 					},
@@ -3280,15 +3283,21 @@ func (al *AgentLoop) buildCommandsRuntime(agent *AgentInstance, opts *processOpt
 				}
 
 				return commands.StatusSnapshot{
-					ThreadID:          status.ThreadID,
-					Model:             status.Model,
-					Provider:          status.Provider,
-					ThinkingMode:      status.ThinkingMode,
-					FastEnabled:       status.FastEnabled,
-					LastUserMessageAt: status.LastUserMessageAt,
-					LastCompactionAt:  status.LastCompactionAt,
-					ForceFreshThread:  status.ForceFreshThread,
-					RecoveryState:     status.RecoveryState,
+					ThreadID:             status.ThreadID,
+					Model:                status.Model,
+					Provider:             status.Provider,
+					ThinkingMode:         status.ThinkingMode,
+					FastEnabled:          status.FastEnabled,
+					LastUserMessageAt:    status.LastUserMessageAt,
+					LastCompactionAt:     status.LastCompactionAt,
+					ForceFreshThread:     status.ForceFreshThread,
+					RecoveryState:        status.RecoveryState,
+					ActiveAccountAlias:   status.ActiveAccountAlias,
+					AccountHealth:        status.AccountHealth,
+					TelemetryFresh:       status.TelemetryFresh,
+					FiveHourRemainingPct: status.FiveHourRemainingPct,
+					WeeklyRemainingPct:   status.WeeklyRemainingPct,
+					SwitchTrigger:        status.SwitchTrigger,
 				}, true
 			}
 			rt.SetModel = func(value string) (string, error) {

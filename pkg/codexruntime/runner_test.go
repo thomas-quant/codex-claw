@@ -329,6 +329,25 @@ func TestRunner_ForceFreshThreadSkipsResumeAndStartsNewThread(t *testing.T) {
 	}
 }
 
+func TestRunner_ReadRateLimits_UsesClientRPC(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeRunnerClient{
+		rateLimits: []RateLimitSnapshot{
+			{ID: "codex", PlanType: "plus"},
+		},
+	}
+	runner := NewRunner(client, NewBindingStore(t.TempDir()))
+
+	limits, err := runner.ReadRateLimits(context.Background())
+	if err != nil {
+		t.Fatalf("ReadRateLimits() error = %v", err)
+	}
+	if len(limits) != 1 || limits[0].ID != "codex" {
+		t.Fatalf("ReadRateLimits() = %#v, want codex limit", limits)
+	}
+}
+
 func TestRunner_ResumeFailureFallsBackToFreshWithSeededInput(t *testing.T) {
 	t.Parallel()
 
@@ -749,6 +768,8 @@ type fakeRunnerClient struct {
 	runErr          error
 	assistantChunks []string
 	dynamicTools    []DynamicToolDefinition
+	account         AccountSnapshot
+	rateLimits      []RateLimitSnapshot
 
 	resumedWith       string
 	runThreadID       string
@@ -808,6 +829,18 @@ func (c *fakeRunnerClient) StartNativeCompaction(_ context.Context, threadID str
 
 func (c *fakeRunnerClient) ListModels(context.Context) ([]ModelCatalogEntry, error) {
 	return append([]ModelCatalogEntry(nil), c.models...), nil
+}
+
+func (c *fakeRunnerClient) ReadAccount(context.Context, bool) (AccountSnapshot, error) {
+	return c.account, nil
+}
+
+func (c *fakeRunnerClient) ReadRateLimits(context.Context) ([]RateLimitSnapshot, error) {
+	return append([]RateLimitSnapshot(nil), c.rateLimits...), nil
+}
+
+func (c *fakeRunnerClient) Close() error {
+	return nil
 }
 
 func (c *fakeRunnerClient) Status() ClientStatus {

@@ -2,6 +2,7 @@ package codexruntime
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -47,6 +48,9 @@ type RunnerClient interface {
 	Restart(context.Context) error
 	StartNativeCompaction(context.Context, string) error
 	ListModels(context.Context) ([]ModelCatalogEntry, error)
+	ReadAccount(context.Context, bool) (AccountSnapshot, error)
+	ReadRateLimits(context.Context) ([]RateLimitSnapshot, error)
+	Close() error
 	Status() ClientStatus
 }
 
@@ -161,6 +165,20 @@ func (r *Runner) ListModels(ctx context.Context) ([]ModelCatalogEntry, error) {
 		return append([]ModelCatalogEntry(nil), fallbackModelCatalog...), nil
 	}
 	return r.catalog.List(ctx)
+}
+
+func (r *Runner) ReadRateLimits(ctx context.Context) ([]RateLimitSnapshot, error) {
+	if r.client == nil {
+		return nil, fmt.Errorf("codexruntime: client not configured")
+	}
+	return r.client.ReadRateLimits(ctx)
+}
+
+func (r *Runner) Close() error {
+	if r.client == nil {
+		return nil
+	}
+	return r.client.Close()
 }
 
 func (r *Runner) ReadStatus(ctx context.Context, bindingKey string) (RuntimeStatusSnapshot, error) {

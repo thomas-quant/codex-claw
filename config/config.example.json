@@ -19,33 +19,165 @@
     "defaults": {
       "workspace": "~/.codex-claw/workspace",
       "restrict_to_workspace": true,
-      "max_tokens": 8192,
+      "allow_read_outside_workspace": false,
+      "max_tokens": 128000,
       "max_tool_iterations": 20,
       "summarize_message_threshold": 20,
-      "summarize_token_percent": 75
+      "summarize_token_percent": 75,
+      "tool_feedback": {
+        "enabled": false,
+        "max_args_length": 300
+      },
+      "split_on_marker": false
     }
   },
   "channels": {
     "telegram": {
-      "enabled": false,
-      "token": "YOUR_TELEGRAM_BOT_TOKEN",
+      "enabled": true,
       "allow_from": ["YOUR_USER_ID"],
-      "streaming": {
+      "group_trigger": {
+        "mention_only": true,
+        "prefixes": ["/codex"]
+      },
+      "typing": {
         "enabled": true
-      }
+      },
+      "placeholder": {
+        "enabled": true,
+        "text": ["Thinking... 💭"]
+      },
+      "streaming": {
+        "enabled": true,
+        "throttle_seconds": 3,
+        "min_growth_chars": 200
+      },
+      "use_markdown_v2": false
     },
     "discord": {
       "enabled": false,
-      "token": "YOUR_DISCORD_BOT_TOKEN",
-      "allow_from": []
-    }
-  },
-  "tools": {
-    "mcp": {
-      "enabled": true,
-      "discovery": {
+      "allow_from": [],
+      "mention_only": false,
+      "group_trigger": {
+        "mention_only": false,
+        "prefixes": ["/codex"]
+      },
+      "typing": {
         "enabled": true
       }
+    }
+  },
+  "heartbeat": {
+    "enabled": true,
+    "interval": 30
+  },
+  "isolation": {
+    "enabled": false,
+    "expose_paths": [
+      {
+        "source": "~/.codex-claw/workspace",
+        "mode": "rw"
+      }
+    ]
+  },
+  "tools": {
+    "allow_read_paths": [
+      "~/.codex-claw/workspace",
+      "~/.codex-claw/shared"
+    ],
+    "allow_write_paths": [
+      "~/.codex-claw/workspace"
+    ],
+    "filter_sensitive_data": true,
+    "filter_min_length": 8,
+    "web": {
+      "enabled": true,
+      "prefer_native": true,
+      "fetch_limit_bytes": 10485760,
+      "format": "plaintext",
+      "duckduckgo": {
+        "enabled": true,
+        "max_results": 5
+      }
+    },
+    "cron": {
+      "enabled": true,
+      "allow_command": true,
+      "exec_timeout_minutes": 5
+    },
+    "exec": {
+      "enabled": true,
+      "enable_deny_patterns": true,
+      "allow_remote": true,
+      "timeout_seconds": 60
+    },
+    "skills": {
+      "enabled": true,
+      "registries": {
+        "clawhub": {
+          "enabled": true,
+          "base_url": "https://clawhub.ai"
+        }
+      },
+      "max_concurrent_searches": 2,
+      "search_cache": {
+        "max_size": 50,
+        "ttl_seconds": 300
+      }
+    },
+    "media_cleanup": {
+      "enabled": true,
+      "max_age_minutes": 30,
+      "interval_minutes": 5
+    },
+    "read_file": {
+      "enabled": true,
+      "mode": "bytes",
+      "max_read_file_size": 65536
+    },
+    "append_file": {
+      "enabled": true
+    },
+    "edit_file": {
+      "enabled": true
+    },
+    "find_skills": {
+      "enabled": true
+    },
+    "install_skill": {
+      "enabled": true
+    },
+    "list_dir": {
+      "enabled": true
+    },
+    "message": {
+      "enabled": true
+    },
+    "send_file": {
+      "enabled": true
+    },
+    "spawn": {
+      "enabled": true
+    },
+    "subagent": {
+      "enabled": true
+    },
+    "web_fetch": {
+      "enabled": true
+    },
+    "write_file": {
+      "enabled": true
+    },
+    "mcp": {
+      "enabled": false,
+      "discovery": {
+        "enabled": true,
+        "ttl": 5,
+        "max_search_results": 5,
+        "use_bm25": true,
+        "use_regex": false
+      },
+      "max_inline_text_chars": 16384,
+      "servers": {}
     }
   }
 }

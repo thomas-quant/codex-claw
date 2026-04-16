@@ -28,5 +28,11 @@ func TestNewOnboardCommand(t *testing.T) {
 	encFlag := cmd.Flags().Lookup("enc")
 	require.NotNil(t, encFlag, "expected --enc flag to be registered")
 	assert.Equal(t, "false", encFlag.DefValue, "--enc should default to false")
+	surfaceFlag := cmd.Flags().Lookup("surface")
+	require.NotNil(t, surfaceFlag, "expected --surface flag to be registered")
+	assert.Equal(t, "", surfaceFlag.DefValue, "--surface should default to interactive choice")
+	importFlag := cmd.Flags().Lookup("import-auth-file")
+	require.NotNil(t, importFlag, "expected --import-auth-file flag to be registered")
+	assert.Equal(t, "", importFlag.DefValue, "--import-auth-file should default to auto-detect/skip")
 	assert.False(t, cmd.HasSubCommands())
 }

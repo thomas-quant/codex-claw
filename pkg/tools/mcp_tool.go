@@ -62,6 +62,10 @@ func (t *MCPTool) SetMaxInlineTextRunes(limit int) {
 }
 
 const maxMCPInlineTextRunes = 16 * 1024
+const (
+	mcpArtifactRetentionAge   = 24 * time.Hour
+	mcpArtifactPruneScanLimit = 32
+)
 
 // sanitizeIdentifierComponent normalizes a string so it can be safely used
 // as part of a tool/function identifier for downstream providers.
@@ -384,12 +388,44 @@ func (t *MCPTool) persistLargeTextArtifact(text string) *ToolResult {
 		return t.largeTextArtifactFallback(text, err)
 	}
 
+	t.pruneMCPArtifactDirectory(dir)
+
 	return &ToolResult{
 		ForLLM: fmt.Sprintf(
 			"[MCP returned a large text result (%d chars); omitted from model context and saved as a local artifact.]",
 			size,
 		),
 		ArtifactTags: []string{"[file:" + path + "]"},
+	}
+}
+
+func (t *MCPTool) pruneMCPArtifactDirectory(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	scanned := 0
+	for _, entry := range entries {
+		if scanned >= mcpArtifactPruneScanLimit {
+			break
+		}
+		scanned++
+
+		if entry.IsDir() {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) <= mcpArtifactRetentionAge {
+			continue
+		}
+
+		_ = os.Remove(filepath.Join(dir, entry.Name()))
 	}
 }
 

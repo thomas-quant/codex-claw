@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -806,5 +807,53 @@ func TestMCPTool_Execute_WhitespaceWorkspaceDisablesArtifactPersistence(t *testi
 	}
 	if !strings.Contains(result.ForLLM, "This is a large MCP text payload") {
 		t.Fatalf("expected large text to remain inline when workspace is blank, got %q", result.ForLLM)
+	}
+}
+
+func TestMCPTool_Execute_LargeTextArtifactPrunesOldArtifacts(t *testing.T) {
+	workspace := t.TempDir()
+	artifactDir := filepath.Join(workspace, ".artifacts", "mcp")
+	if err := os.MkdirAll(artifactDir, 0o700); err != nil {
+		t.Fatalf("failed to create artifact dir: %v", err)
+	}
+
+	stalePath := filepath.Join(artifactDir, "stale.txt")
+	freshPath := filepath.Join(artifactDir, "fresh.txt")
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("failed to write stale artifact: %v", err)
+	}
+	if err := os.WriteFile(freshPath, []byte("fresh"), 0o600); err != nil {
+		t.Fatalf("failed to write fresh artifact: %v", err)
+	}
+
+	oldTime := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(stalePath, oldTime, oldTime); err != nil {
+		t.Fatalf("failed to age stale artifact: %v", err)
+	}
+
+	largeText := strings.Repeat("This is a large MCP text payload.\n", 800)
+	manager := &MockMCPManager{
+		callToolFunc: func(ctx context.Context, serverName, toolName string, arguments map[string]any) (*mcp.CallToolResult, error) {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: largeText},
+				},
+			}, nil
+		},
+	}
+
+	mcpTool := NewMCPTool(manager, "test_server", &mcp.Tool{Name: "dump_payload"})
+	mcpTool.SetWorkspace(workspace)
+
+	result := mcpTool.Execute(context.Background(), nil)
+
+	if len(result.ArtifactTags) != 1 {
+		t.Fatalf("expected 1 artifact tag, got %+v", result.ArtifactTags)
+	}
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale artifact to be pruned, stat err=%v", err)
+	}
+	if _, err := os.Stat(freshPath); err != nil {
+		t.Fatalf("expected fresh artifact to remain, stat err=%v", err)
 	}
 }

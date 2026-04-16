@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thomas-quant/codex-claw/cmd/codex-claw/internal"
+	"github.com/thomas-quant/codex-claw/pkg"
 	"github.com/thomas-quant/codex-claw/pkg/config"
 )
 
@@ -37,6 +38,7 @@ func TestNewCodexClawCommand(t *testing.T) {
 	assert.Nil(t, cmd.PersistentPostRun)
 
 	allowedCommands := []string{
+		"account",
 		"agent",
 		"cron",
 		"gateway",
@@ -56,4 +58,16 @@ func TestNewCodexClawCommand(t *testing.T) {
 
 		assert.False(t, subcmd.Hidden)
 	}
+}
+
+func TestStartupBanner_UsesAppName(t *testing.T) {
+	upperName := strings.ToUpper(pkg.AppName)
+
+	plain := startupBanner(true)
+	assert.Contains(t, plain, upperName)
+
+	colored := startupBanner(false)
+	assert.Contains(t, colored, upperName)
+	assert.Contains(t, colored, colorBlue)
+	assert.Contains(t, colored, "\033[0m")
 }

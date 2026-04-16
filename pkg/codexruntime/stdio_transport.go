@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -14,9 +15,15 @@ import (
 
 // NewStdIOClient creates a Client backed by a long-lived codex app-server
 // subprocess speaking newline-delimited JSON-RPC over stdio.
-func NewStdIOClient(command string, args []string, workdir string, requestTimeout time.Duration) *Client {
+func NewStdIOClient(
+	command string,
+	args []string,
+	workdir string,
+	requestTimeout time.Duration,
+	envOverrides ...map[string]string,
+) *Client {
 	return NewClient(
-		NewStdIOTransport(command, args, workdir),
+		NewStdIOTransport(command, args, workdir, envOverrides...),
 		ClientOptions{RequestTimeout: requestTimeout},
 	)
 }
@@ -25,13 +32,15 @@ type StdIOTransport struct {
 	command string
 	args    []string
 	workdir string
+	env     map[string]string
 }
 
-func NewStdIOTransport(command string, args []string, workdir string) *StdIOTransport {
+func NewStdIOTransport(command string, args []string, workdir string, envOverrides ...map[string]string) *StdIOTransport {
 	return &StdIOTransport{
 		command: command,
 		args:    append([]string(nil), args...),
 		workdir: workdir,
+		env:     firstEnvOverride(envOverrides),
 	}
 }
 
@@ -40,6 +49,7 @@ func (t *StdIOTransport) Start(context.Context) (Conn, error) {
 	if t.workdir != "" {
 		cmd.Dir = t.workdir
 	}
+	cmd.Env = mergeCommandEnv(os.Environ(), t.env)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -196,4 +206,47 @@ func (c *stdioConn) wrapErr(err error) error {
 		return err
 	}
 	return fmt.Errorf("%w: %s", err, stderr)
+}
+
+func mergeCommandEnv(base []string, overrides map[string]string) []string {
+	if len(overrides) == 0 {
+		return append([]string(nil), base...)
+	}
+
+	out := append([]string(nil), base...)
+	for key, value := range overrides {
+		prefix := key + "="
+		replaced := false
+		for i := range out {
+			if strings.HasPrefix(out[i], prefix) {
+				out[i] = prefix + value
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			out = append(out, prefix+value)
+		}
+	}
+
+	return out
+}
+
+func cloneEnvMap(env map[string]string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]string, len(env))
+	for key, value := range env {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func firstEnvOverride(envOverrides []map[string]string) map[string]string {
+	if len(envOverrides) == 0 {
+		return nil
+	}
+	return cloneEnvMap(envOverrides[0])
 }
