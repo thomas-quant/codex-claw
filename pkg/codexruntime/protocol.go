@@ -108,11 +108,14 @@ type ModelListResult struct {
 }
 
 type ThreadStartResult struct {
-	ThreadID string `json:"thread_id"`
+	ThreadID string `json:"-"`
+	Thread   struct {
+		ID string `json:"id"`
+	} `json:"thread,omitempty"`
 }
 
 type ThreadResumeParams struct {
-	ThreadID       string                  `json:"thread_id"`
+	ThreadID       string                  `json:"threadId"`
 	DynamicTools   []DynamicToolDefinition `json:"dynamicTools,omitempty"`
 	ApprovalPolicy string                  `json:"approvalPolicy,omitempty"`
 }
@@ -121,14 +124,22 @@ type ThreadCompactStartParams struct {
 	ThreadID string `json:"thread_id"`
 }
 
+type TurnInputItem struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
 type TurnStartParams struct {
-	ThreadID       string `json:"thread_id"`
-	InputText      string `json:"input_text"`
-	ApprovalPolicy string `json:"approvalPolicy,omitempty"`
+	ThreadID       string          `json:"threadId"`
+	Input          []TurnInputItem `json:"input,omitempty"`
+	ApprovalPolicy string          `json:"approvalPolicy,omitempty"`
 }
 
 type TurnStartResult struct {
-	Content string `json:"content"`
+	TurnID string `json:"-"`
+	Turn   struct {
+		ID string `json:"id"`
+	} `json:"turn,omitempty"`
 }
 
 type AgentMessageDeltaParams struct {
@@ -201,4 +212,206 @@ type PermissionsApprovalRequestParams struct {
 	TurnID               string         `json:"turn_id,omitempty"`
 	ConversationID       string         `json:"conversationId,omitempty"`
 	RequestedPermissions map[string]any `json:"permissions,omitempty"`
+}
+
+func (r *ThreadStartResult) UnmarshalJSON(data []byte) error {
+	type rawThreadStartResult struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		Thread         struct {
+			ID string `json:"id"`
+		} `json:"thread"`
+	}
+
+	var raw rawThreadStartResult
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	r.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy, raw.Thread.ID)
+	r.Thread = raw.Thread
+	return nil
+}
+
+func (r *TurnStartResult) UnmarshalJSON(data []byte) error {
+	type rawTurnStartResult struct {
+		TurnIDLegacy string `json:"turn_id"`
+		TurnID       string `json:"turnId"`
+		Turn         struct {
+			ID string `json:"id"`
+		} `json:"turn"`
+	}
+
+	var raw rawTurnStartResult
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	r.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy, raw.Turn.ID)
+	r.Turn = raw.Turn
+	return nil
+}
+
+func (p *AgentMessageDeltaParams) UnmarshalJSON(data []byte) error {
+	type rawAgentMessageDeltaParams struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		TurnIDLegacy   string `json:"turn_id"`
+		TurnID         string `json:"turnId"`
+		ItemIDLegacy   string `json:"item_id"`
+		ItemID         string `json:"itemId"`
+		Delta          string `json:"delta"`
+	}
+
+	var raw rawAgentMessageDeltaParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.ItemID = firstProtocolValue(raw.ItemID, raw.ItemIDLegacy)
+	p.Delta = raw.Delta
+	return nil
+}
+
+func (p *ReasoningTextDeltaParams) UnmarshalJSON(data []byte) error {
+	type rawReasoningTextDeltaParams struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		TurnIDLegacy   string `json:"turn_id"`
+		TurnID         string `json:"turnId"`
+		ItemIDLegacy   string `json:"item_id"`
+		ItemID         string `json:"itemId"`
+		Text           string `json:"text"`
+	}
+
+	var raw rawReasoningTextDeltaParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.ItemID = firstProtocolValue(raw.ItemID, raw.ItemIDLegacy)
+	p.Text = raw.Text
+	return nil
+}
+
+func (p *ItemCompletedParams) UnmarshalJSON(data []byte) error {
+	type rawItemCompletedParams struct {
+		ThreadIDLegacy string     `json:"thread_id"`
+		ThreadID       string     `json:"threadId"`
+		TurnIDLegacy   string     `json:"turn_id"`
+		TurnID         string     `json:"turnId"`
+		Item           OutputItem `json:"item"`
+	}
+
+	var raw rawItemCompletedParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.Item = raw.Item
+	return nil
+}
+
+func (p *ToolCallRequestParams) UnmarshalJSON(data []byte) error {
+	type rawToolCallRequestParams struct {
+		ThreadIDLegacy string         `json:"thread_id"`
+		ThreadID       string         `json:"threadId"`
+		TurnIDLegacy   string         `json:"turn_id"`
+		TurnID         string         `json:"turnId"`
+		CallIDLegacy   string         `json:"call_id"`
+		CallID         string         `json:"callId"`
+		ItemID         string         `json:"itemId"`
+		Name           string         `json:"name"`
+		Tool           string         `json:"tool"`
+		Arguments      map[string]any `json:"arguments"`
+	}
+
+	var raw rawToolCallRequestParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.CallID = firstProtocolValue(raw.CallID, raw.CallIDLegacy, raw.ItemID)
+	p.Name = firstProtocolValue(raw.Name, raw.Tool)
+	p.Arguments = raw.Arguments
+	return nil
+}
+
+func (p *CommandExecutionApprovalRequestParams) UnmarshalJSON(data []byte) error {
+	type rawCommandExecutionApprovalRequestParams struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		TurnIDLegacy   string `json:"turn_id"`
+		TurnID         string `json:"turnId"`
+		ConversationID string `json:"conversationId"`
+	}
+
+	var raw rawCommandExecutionApprovalRequestParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.ConversationID = raw.ConversationID
+	return nil
+}
+
+func (p *FileChangeApprovalRequestParams) UnmarshalJSON(data []byte) error {
+	type rawFileChangeApprovalRequestParams struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		TurnIDLegacy   string `json:"turn_id"`
+		TurnID         string `json:"turnId"`
+		ConversationID string `json:"conversationId"`
+	}
+
+	var raw rawFileChangeApprovalRequestParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.ConversationID = raw.ConversationID
+	return nil
+}
+
+func (p *PermissionsApprovalRequestParams) UnmarshalJSON(data []byte) error {
+	type rawPermissionsApprovalRequestParams struct {
+		ThreadIDLegacy       string         `json:"thread_id"`
+		ThreadID             string         `json:"threadId"`
+		TurnIDLegacy         string         `json:"turn_id"`
+		TurnID               string         `json:"turnId"`
+		ConversationID       string         `json:"conversationId"`
+		RequestedPermissions map[string]any `json:"permissions"`
+	}
+
+	var raw rawPermissionsApprovalRequestParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.ConversationID = raw.ConversationID
+	p.RequestedPermissions = raw.RequestedPermissions
+	return nil
+}
+
+func firstProtocolValue(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -91,6 +91,9 @@ func (c *Client) Start(ctx context.Context) error {
 			"name":    c.opts.ClientName,
 			"version": c.opts.ClientVersion,
 		},
+		"capabilities": map[string]any{
+			"experimentalApi": true,
+		},
 	}, nil); err != nil {
 		_ = c.closeLocked()
 		return err
@@ -185,12 +188,7 @@ func (c *Client) ListModels(ctx context.Context) ([]ModelCatalogEntry, error) {
 }
 
 func (c *Client) StartThread(ctx context.Context, model string, dynamicTools []DynamicToolDefinition) (string, error) {
-	var result struct {
-		ThreadID string `json:"thread_id"`
-		Thread   struct {
-			ID string `json:"id"`
-		} `json:"thread"`
-	}
+	var result ThreadStartResult
 
 	if err := c.Call(ctx, MethodThreadStart, ThreadStartParams{
 		Model:          model,
@@ -201,9 +199,6 @@ func (c *Client) StartThread(ctx context.Context, model string, dynamicTools []D
 	}
 
 	threadID := result.ThreadID
-	if threadID == "" {
-		threadID = result.Thread.ID
-	}
 	if threadID == "" {
 		return "", fmt.Errorf("codexruntime: thread/start returned empty thread_id")
 	}
@@ -226,12 +221,7 @@ func (c *Client) Status() ClientStatus {
 }
 
 func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, error) {
-	var result struct {
-		TurnID string `json:"turn_id"`
-		Turn   struct {
-			ID string `json:"id"`
-		} `json:"turn"`
-	}
+	var result TurnStartResult
 
 	c.ioMu.Lock()
 
@@ -247,7 +237,7 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 
 	if err := c.callLocked(ctx, c.nextRequestID(), MethodTurnStart, TurnStartParams{
 		ThreadID:       req.ThreadID,
-		InputText:      req.InputText,
+		Input:          []TurnInputItem{{Type: "text", Text: req.InputText}},
 		ApprovalPolicy: approvalPolicyPermanentYOLO,
 	}, &result); err != nil {
 		c.setTurnActiveLocked(false)
@@ -258,9 +248,6 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 	defer c.setTurnActive(false)
 
 	turnID := result.TurnID
-	if turnID == "" {
-		turnID = result.Turn.ID
-	}
 	if turnID == "" {
 		return "", fmt.Errorf("codexruntime: turn/start returned empty turn_id")
 	}
@@ -306,6 +293,9 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 			projector.Apply(notification)
 		case turnCompletedParams:
 			if params.ThreadID == req.ThreadID && params.TurnID == turnID {
+				if err := params.err(); err != nil {
+					return "", err
+				}
 				return projector.FinalAssistantText(), nil
 			}
 		}
@@ -342,8 +332,76 @@ type messageEnvelope struct {
 }
 
 type turnCompletedParams struct {
-	ThreadID string `json:"thread_id"`
-	TurnID   string `json:"turn_id"`
+	ThreadID string `json:"-"`
+	TurnID   string `json:"-"`
+	Status   string `json:"-"`
+	Error    *struct {
+		Message string `json:"message"`
+	} `json:"-"`
+}
+
+func (p *turnCompletedParams) UnmarshalJSON(data []byte) error {
+	type rawTurnCompletedParams struct {
+		ThreadIDLegacy string `json:"thread_id"`
+		ThreadID       string `json:"threadId"`
+		TurnIDLegacy   string `json:"turn_id"`
+		TurnID         string `json:"turnId"`
+		Status         string `json:"status"`
+		Error          *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Turn *struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Error  *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		} `json:"turn"`
+	}
+
+	var raw rawTurnCompletedParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = firstProtocolValue(raw.ThreadID, raw.ThreadIDLegacy)
+	if raw.Turn != nil {
+		p.TurnID = firstProtocolValue(raw.Turn.ID, raw.TurnID, raw.TurnIDLegacy)
+		p.Status = firstProtocolValue(raw.Turn.Status, raw.Status)
+		if raw.Turn.Error != nil {
+			p.Error = raw.Turn.Error
+		} else {
+			p.Error = raw.Error
+		}
+		return nil
+	}
+
+	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
+	p.Status = raw.Status
+	p.Error = raw.Error
+	return nil
+}
+
+func (p turnCompletedParams) err() error {
+	switch p.Status {
+	case "", "completed":
+		return nil
+	case "failed":
+		if p.Error != nil && p.Error.Message != "" {
+			return fmt.Errorf("codexruntime: turn failed: %s", p.Error.Message)
+		}
+		return fmt.Errorf("codexruntime: turn failed")
+	case "interrupted":
+		if p.Error != nil && p.Error.Message != "" {
+			return fmt.Errorf("codexruntime: turn interrupted: %s", p.Error.Message)
+		}
+		return fmt.Errorf("codexruntime: turn interrupted")
+	default:
+		if p.Error != nil && p.Error.Message != "" {
+			return fmt.Errorf("codexruntime: turn %s: %s", p.Status, p.Error.Message)
+		}
+		return nil
+	}
 }
 
 func (c *Client) callLocked(ctx context.Context, id int64, method string, params any, result any) error {

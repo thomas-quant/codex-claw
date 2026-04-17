@@ -3,6 +3,7 @@ package codexruntime
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 type ToolCallRequest struct {
@@ -25,11 +26,11 @@ func handleToolCall(ctx context.Context, req ToolCallRequest, handler ToolCallHa
 		return toolFailure(err.Error()), nil
 	}
 	if len(result.Content) == 0 {
-		result.Content = []ToolResultContentItem{{Type: "text"}}
+		result.Content = []ToolResultContentItem{{Type: "inputText"}}
 	}
 
 	return ToolCallResponse{
-		Content: result.Content,
+		Content: normalizeToolResultContentItems(result.Content),
 		Success: result.Success,
 	}, nil
 }
@@ -37,9 +38,23 @@ func handleToolCall(ctx context.Context, req ToolCallRequest, handler ToolCallHa
 func toolFailure(message string) ToolCallResponse {
 	return ToolCallResponse{
 		Content: []ToolResultContentItem{{
-			Type: "text",
+			Type: "inputText",
 			Text: message,
 		}},
 		Success: false,
 	}
+}
+
+func normalizeToolResultContentItems(items []ToolResultContentItem) []ToolResultContentItem {
+	normalized := make([]ToolResultContentItem, 0, len(items))
+	for _, item := range items {
+		switch strings.TrimSpace(item.Type) {
+		case "", "text", "inputText":
+			item.Type = "inputText"
+		case "image", "imageUrl", "inputImage":
+			item.Type = "inputImage"
+		}
+		normalized = append(normalized, item)
+	}
+	return normalized
 }

@@ -55,6 +55,8 @@ func TestCreateProvider_UsesCodexRuntimeDefaults(t *testing.T) {
 }
 
 func TestCreateDeepSeekFallbackCandidate_UsesRuntimeBlock(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+
 	cfg := config.DefaultConfig()
 	cfg.Runtime.Fallback.DeepSeek.Enabled = true
 	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-reasoner"

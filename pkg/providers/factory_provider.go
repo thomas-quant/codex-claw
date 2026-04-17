@@ -7,6 +7,7 @@ package providers
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -68,16 +69,46 @@ var newCodexRunnerClient = func(workspace string, requestTimeoutSeconds int, env
 	)
 }
 
+var defaultCodexCLIHome = func() string {
+	if envHome := strings.TrimSpace(os.Getenv("CODEX_HOME")); envHome != "" {
+		return envHome
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, ".codex")
+}
+
 var newCodexAppServerRunner = func(workspace string, requestTimeoutSeconds int) codexAppServerRunner {
 	layout := codexaccounts.ResolveLayout(config.GetHome())
 	bindings := codexruntime.NewBindingStore(filepath.Join(workspace, "codex"))
+	codexHome := resolveCodexAppServerHome(layout)
 	client := newCodexRunnerClient(workspace, requestTimeoutSeconds, map[string]string{
-		"CODEX_HOME": layout.CodexHome,
+		"CODEX_HOME": codexHome,
 	})
 	base := codexruntime.NewRunner(client, bindings)
 	return codexaccounts.NewCoordinator(base, codexaccounts.NewStore(layout), codexaccounts.CoordinatorOptions{
 		IsUsageExhausted: IsCodexUsageExhausted,
 	})
+}
+
+func resolveCodexAppServerHome(layout codexaccounts.Layout) string {
+	if pathExists(layout.CodexHome) || pathExists(layout.LiveAuthFile) {
+		return layout.CodexHome
+	}
+	if fallback := strings.TrimSpace(defaultCodexCLIHome()); fallback != "" && pathExists(fallback) {
+		return fallback
+	}
+	return layout.CodexHome
+}
+
+func pathExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // ExtractProtocol extracts the protocol prefix and model identifier from a model string.

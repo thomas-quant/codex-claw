@@ -40,8 +40,14 @@ func TestToolBridge(t *testing.T) {
 		if len(got.Content) != 2 {
 			t.Fatalf("handleToolCall() content len = %d, want %d", len(got.Content), 2)
 		}
+		if got.Content[0].Type != "inputText" {
+			t.Fatalf("first content item type = %q, want %q", got.Content[0].Type, "inputText")
+		}
 		if got.Content[0].Text != "sunny" {
 			t.Fatalf("first content item = %#v, want sunny text", got.Content[0])
+		}
+		if got.Content[1].Type != "inputImage" {
+			t.Fatalf("second content item type = %q, want %q", got.Content[1].Type, "inputImage")
 		}
 		if got.Content[1].ImageURL != "https://example.com/icon.png" {
 			t.Fatalf("second content item = %#v, want image URL", got.Content[1])
@@ -61,8 +67,8 @@ func TestToolBridge(t *testing.T) {
 		if got.Success {
 			t.Fatalf("handleToolCall() success = %v, want false", got.Success)
 		}
-		if len(got.Content) != 1 || got.Content[0].Type != "text" {
-			t.Fatalf("handleToolCall() content = %#v, want one text item", got.Content)
+		if len(got.Content) != 1 || got.Content[0].Type != "inputText" {
+			t.Fatalf("handleToolCall() content = %#v, want one inputText item", got.Content)
 		}
 	})
 
@@ -80,6 +86,9 @@ func TestToolBridge(t *testing.T) {
 		}
 		if got.Success {
 			t.Fatalf("handleToolCall() success = %v, want false", got.Success)
+		}
+		if len(got.Content) != 1 || got.Content[0].Type != "inputText" {
+			t.Fatalf("handleToolCall() content type = %#v, want one inputText item", got.Content)
 		}
 		if len(got.Content) != 1 || got.Content[0].Text != "tool failed" {
 			t.Fatalf("handleToolCall() content = %#v, want tool error text", got.Content)

@@ -369,19 +369,58 @@ func buildAllowReadPatterns(cfg *config.Config) []*regexp.Regexp {
 	}
 
 	compiled := compilePatterns(configured)
-	mediaDirPattern := regexp.MustCompile(mediaTempDirPattern())
-	for _, pattern := range compiled {
-		if pattern.String() == mediaDirPattern.String() {
-			return compiled
+	for _, pattern := range defaultReadWhitelistPatterns() {
+		if !containsPattern(compiled, pattern) {
+			compiled = append(compiled, pattern)
 		}
 	}
 
-	return append(compiled, mediaDirPattern)
+	return compiled
 }
 
 func mediaTempDirPattern() string {
 	sep := regexp.QuoteMeta(string(os.PathSeparator))
 	return "^" + regexp.QuoteMeta(filepath.Clean(media.TempDir())) + "(?:" + sep + "|$)"
+}
+
+func defaultReadWhitelistPatterns() []*regexp.Regexp {
+	patterns := []*regexp.Regexp{regexp.MustCompile(mediaTempDirPattern())}
+
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return patterns
+	}
+
+	for _, root := range []string{
+		filepath.Join(home, ".agents", "skills"),
+		filepath.Join(home, ".codex", "skills"),
+	} {
+		if !pathExists(root) {
+			continue
+		}
+		patterns = append(patterns, regexp.MustCompile(allowedDirPattern(root)))
+	}
+
+	return patterns
+}
+
+func allowedDirPattern(path string) string {
+	sep := regexp.QuoteMeta(string(os.PathSeparator))
+	return "^" + regexp.QuoteMeta(filepath.Clean(path)) + "(?:" + sep + "|$)"
+}
+
+func containsPattern(patterns []*regexp.Regexp, want *regexp.Regexp) bool {
+	for _, pattern := range patterns {
+		if pattern.String() == want.String() {
+			return true
+		}
+	}
+	return false
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // Close releases resources held by the agent's session store.

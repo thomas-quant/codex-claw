@@ -10,6 +10,7 @@ import (
 	"github.com/thomas-quant/codex-claw/pkg/config"
 	"github.com/thomas-quant/codex-claw/pkg/media"
 	"github.com/thomas-quant/codex-claw/pkg/providers"
+	"github.com/thomas-quant/codex-claw/pkg/tools"
 )
 
 func TestNewAgentInstance_UsesDefaultsTemperatureAndMaxTokens(t *testing.T) {
@@ -238,6 +239,31 @@ func TestNewAgentInstance_AllowsMediaTempDirForReadListAndExec(t *testing.T) {
 	}
 }
 
+func TestBuildAllowReadPatterns_AllowsExternalCodexSkillRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	workspace := t.TempDir()
+	skillFile := filepath.Join(home, ".agents", "skills", "using-superpowers", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skillFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll(skill dir) error = %v", err)
+	}
+	if err := os.WriteFile(skillFile, []byte("skill body"), 0o644); err != nil {
+		t.Fatalf("WriteFile(skill file) error = %v", err)
+	}
+
+	patterns := buildAllowReadPatterns(&config.Config{})
+	tool := tools.NewReadFileTool(workspace, true, tools.MaxReadFileSize, patterns)
+
+	result := tool.Execute(context.Background(), map[string]any{"path": skillFile})
+	if result.IsError {
+		t.Fatalf("read_file should allow external codex skill roots, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "skill body") {
+		t.Fatalf("read_file output missing skill body: %s", result.ForLLM)
+	}
+}
+
 // TestPopulateCandidateProviders_NilCfgIsNoop verifies that passing a nil
 // config does not panic and leaves the output map empty.
 func TestPopulateCandidateProviders_NilCfgIsNoop(t *testing.T) {
@@ -278,6 +304,7 @@ func TestPopulateCandidateProviders_ResolvesRawCodexModel(t *testing.T) {
 
 func TestPopulateCandidateProviders_ResolvesRuntimeDeepSeekFallback(t *testing.T) {
 	workspace := t.TempDir()
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
 	out := map[string]providers.LLMProvider{}
 
 	cfg := config.DefaultConfig()
@@ -294,6 +321,7 @@ func TestPopulateCandidateProviders_ResolvesRuntimeDeepSeekFallback(t *testing.T
 
 func TestNewAgentInstance_ConfiguresRuntimeDeepSeekFallbackProvider(t *testing.T) {
 	workspace := t.TempDir()
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
 
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Workspace = workspace
@@ -312,6 +340,27 @@ func TestNewAgentInstance_ConfiguresRuntimeDeepSeekFallbackProvider(t *testing.T
 	}
 }
 
+func TestNewAgentInstance_SkipsRuntimeDeepSeekFallbackWithoutAPIKey(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("DEEPSEEK_API_KEY", "")
+
+	cfg := config.DefaultConfig()
+	cfg.Agents.Defaults.Workspace = workspace
+	cfg.Agents.Defaults.ModelName = "gpt-5.4"
+	cfg.Runtime.Fallback.DeepSeek.Enabled = true
+	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
+	cfg.Runtime.Fallback.DeepSeek.APIBase = "https://api.deepseek.com/v1"
+
+	agent := NewAgentInstance(nil, &cfg.Agents.Defaults, cfg, &mockProvider{})
+
+	if agent.DeepSeekFallback != nil {
+		t.Fatalf("DeepSeekFallback = %#v, want nil", agent.DeepSeekFallback)
+	}
+	if agent.DeepSeekFallbackModel != "" {
+		t.Fatalf("DeepSeekFallbackModel = %q, want empty", agent.DeepSeekFallbackModel)
+	}
+}
+
 // TestPopulateCandidateProviders_EmptyNamesIsNoop verifies the early-exit
 // path when the names slice is empty.
 func TestPopulateCandidateProviders_EmptyNamesIsNoop(t *testing.T) {
@@ -325,6 +374,7 @@ func TestPopulateCandidateProviders_EmptyNamesIsNoop(t *testing.T) {
 
 func TestNewAgentInstance_IgnoresDeprecatedConfiguredFallbacks(t *testing.T) {
 	workspace := t.TempDir()
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
 
 	cfg := config.DefaultConfig()
 	cfg.Agents.Defaults.Workspace = workspace

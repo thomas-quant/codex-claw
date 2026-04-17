@@ -29,6 +29,42 @@ func TestClient_InitializeHandshake(t *testing.T) {
 	}
 }
 
+func TestClient_InitializeHandshake_EnablesExperimentalAPI(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	writes := transport.Writes()
+	if len(writes) < 1 {
+		t.Fatalf("Writes() len = %d, want at least 1 initialize request", len(writes))
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			Capabilities struct {
+				ExperimentalAPI bool `json:"experimentalApi"`
+			} `json:"capabilities"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(writes[0], &envelope); err != nil {
+		t.Fatalf("decode initialize request: %v", err)
+	}
+	if envelope.Method != MethodInitialize {
+		t.Fatalf("initialize method = %q, want %q", envelope.Method, MethodInitialize)
+	}
+	if !envelope.Params.Capabilities.ExperimentalAPI {
+		t.Fatal("initialize experimentalApi = false, want true")
+	}
+}
+
 func TestClient_CallDecodesResult(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +111,11 @@ func TestClient_StartThreadAcceptsAppServerShapes(t *testing.T) {
 			response: `{"jsonrpc":"2.0","id":2,"result":{"thread_id":"thr_field"}}`,
 			want:     "thr_field",
 		},
+		{
+			name:     "threadId field",
+			response: `{"jsonrpc":"2.0","id":2,"result":{"threadId":"thr_camel"}}`,
+			want:     "thr_camel",
+		},
 	}
 
 	for _, tt := range tests {
@@ -99,6 +140,65 @@ func TestClient_StartThreadAcceptsAppServerShapes(t *testing.T) {
 				t.Fatalf("StartThread() = %q, want %q", threadID, tt.want)
 			}
 		})
+	}
+}
+
+func TestClient_StartThreadUsesCurrentAppServerRequestShape(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.118.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"threadId":"thr_current"}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	threadID, err := client.StartThread(context.Background(), "gpt-5.4", []DynamicToolDefinition{
+		{
+			Name:        "lookup_weather",
+			Description: "Looks up weather",
+			InputSchema: map[string]any{"type": "object"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartThread() error = %v", err)
+	}
+	if threadID != "thr_current" {
+		t.Fatalf("StartThread() = %q, want %q", threadID, "thr_current")
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 3 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 3)
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			Model          string `json:"model"`
+			ApprovalPolicy string `json:"approvalPolicy"`
+			DynamicTools   []struct {
+				Name string `json:"name"`
+			} `json:"dynamicTools"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(writes[2], &envelope); err != nil {
+		t.Fatalf("decode thread/start request: %v", err)
+	}
+	if envelope.Method != MethodThreadStart {
+		t.Fatalf("thread/start method = %q, want %q", envelope.Method, MethodThreadStart)
+	}
+	if envelope.Params.Model != "gpt-5.4" {
+		t.Fatalf("thread/start model = %q, want %q", envelope.Params.Model, "gpt-5.4")
+	}
+	if envelope.Params.ApprovalPolicy != approvalPolicyPermanentYOLO {
+		t.Fatalf("thread/start approvalPolicy = %q, want %q", envelope.Params.ApprovalPolicy, approvalPolicyPermanentYOLO)
+	}
+	if len(envelope.Params.DynamicTools) != 1 || envelope.Params.DynamicTools[0].Name != "lookup_weather" {
+		t.Fatalf("thread/start dynamicTools = %#v, want lookup_weather entry", envelope.Params.DynamicTools)
 	}
 }
 
@@ -285,6 +385,129 @@ func TestClient_RunTextTurnProjectsFinalAssistantFromNotifications(t *testing.T)
 	}
 }
 
+func TestClient_RunTextTurnUsesCurrentAppServerTurnSchema(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.118.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turnId":"turn_123"}}`,
+		`{"jsonrpc":"2.0","method":"item/agentMessage/delta","params":{"threadId":"thr_123","turnId":"turn_123","itemId":"msg_1","delta":"Hello"}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turnId":"turn_123"}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if content != "Hello" {
+		t.Fatalf("RunTextTurn() content = %q, want %q", content, "Hello")
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 3 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 3)
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			ThreadIDLegacy string `json:"thread_id"`
+			ThreadID       string `json:"threadId"`
+			InputText      string `json:"input_text"`
+			Input          []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"input"`
+			ApprovalPolicy string `json:"approvalPolicy"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(writes[2], &envelope); err != nil {
+		t.Fatalf("decode turn/start request: %v", err)
+	}
+	if envelope.Method != MethodTurnStart {
+		t.Fatalf("turn/start method = %q, want %q", envelope.Method, MethodTurnStart)
+	}
+	if envelope.Params.ThreadID != "thr_123" {
+		t.Fatalf("turn/start threadId = %q, want %q", envelope.Params.ThreadID, "thr_123")
+	}
+	if envelope.Params.ThreadIDLegacy != "" {
+		t.Fatalf("turn/start thread_id = %q, want empty legacy field", envelope.Params.ThreadIDLegacy)
+	}
+	if envelope.Params.InputText != "" {
+		t.Fatalf("turn/start input_text = %q, want empty legacy field", envelope.Params.InputText)
+	}
+	if len(envelope.Params.Input) != 1 {
+		t.Fatalf("turn/start input len = %d, want %d", len(envelope.Params.Input), 1)
+	}
+	if envelope.Params.Input[0].Type != "text" || envelope.Params.Input[0].Text != "hi" {
+		t.Fatalf("turn/start input = %#v, want one text input item", envelope.Params.Input)
+	}
+	if envelope.Params.ApprovalPolicy != approvalPolicyPermanentYOLO {
+		t.Fatalf("turn/start approvalPolicy = %q, want %q", envelope.Params.ApprovalPolicy, approvalPolicyPermanentYOLO)
+	}
+}
+
+func TestClient_RunTextTurnHandlesNestedTurnCompletedShape(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","method":"item/agentMessage/delta","params":{"threadId":"thr_123","turnId":"turn_123","itemId":"msg_1","delta":"OK"}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"completed","error":null}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if content != "OK" {
+		t.Fatalf("RunTextTurn() content = %q, want %q", content, "OK")
+	}
+}
+
+func TestClient_RunTextTurnReturnsNestedTurnFailure(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"failed","error":{"message":"usage limit exceeded"}}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err == nil {
+		t.Fatal("RunTextTurn() error = nil, want turn failure")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "usage limit exceeded") {
+		t.Fatalf("RunTextTurn() error = %v, want usage limit message", err)
+	}
+}
+
 func TestClient_RunTextTurnReplaysBufferedNotificationsAfterResponse(t *testing.T) {
 	t.Parallel()
 
@@ -377,8 +600,66 @@ func TestClient_RunTextTurnHandlesToolCallServerRequest(t *testing.T) {
 	if !response.Result.Success {
 		t.Fatalf("tool call response success = %v, want true", response.Result.Success)
 	}
+	if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "inputText" {
+		t.Fatalf("tool call response content type = %#v, want inputText item", response.Result.Content)
+	}
 	if len(response.Result.Content) != 1 || response.Result.Content[0].Text != "sunny" {
 		t.Fatalf("tool call response = %#v, want sunny text result", response.Result)
+	}
+}
+
+func TestClient_RunTextTurnHandlesCurrentToolCallServerRequestShape(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","id":99,"method":"item/tool/call","params":{"threadId":"thr_123","turnId":"turn_123","itemId":"call_1","tool":"lookup_weather","arguments":{"city":"London"}}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turnId":"turn_123"}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+		HandleToolCall: func(_ context.Context, req ToolCallRequest) (ToolCallResult, error) {
+			if req.CallID != "call_1" {
+				t.Fatalf("tool call id = %q, want %q", req.CallID, "call_1")
+			}
+			if req.Name != "lookup_weather" {
+				t.Fatalf("tool name = %q, want %q", req.Name, "lookup_weather")
+			}
+			return ToolCallResult{
+				Success: true,
+				Content: []ToolResultContentItem{{Type: "text", Text: "sunny"}},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if content != "" {
+		t.Fatalf("RunTextTurn() content = %q, want empty content", content)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 4 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 4)
+	}
+
+	var response struct {
+		ID     int64            `json:"id"`
+		Result ToolCallResponse `json:"result"`
+	}
+	if err := json.Unmarshal(writes[3], &response); err != nil {
+		t.Fatalf("decode tool call response: %v", err)
+	}
+	if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "inputText" {
+		t.Fatalf("tool call response content type = %#v, want inputText item", response.Result.Content)
 	}
 }
 

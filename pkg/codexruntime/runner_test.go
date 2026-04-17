@@ -346,6 +346,37 @@ func TestRunner_ReadRateLimits_UsesClientRPC(t *testing.T) {
 	if len(limits) != 1 || limits[0].ID != "codex" {
 		t.Fatalf("ReadRateLimits() = %#v, want codex limit", limits)
 	}
+	if client.startCalls != 1 {
+		t.Fatalf("Start() calls = %d, want %d", client.startCalls, 1)
+	}
+}
+
+func TestRunner_StartsClientBeforeFreshThread(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeRunnerClient{
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"OK"},
+	}
+	runner := NewRunner(client, NewBindingStore(t.TempDir()))
+
+	got, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "cli:diag",
+		Model:      "gpt-5.4-mini",
+		InputText:  "Reply with OK and nothing else.",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if got.Content != "OK" {
+		t.Fatalf("RunTextTurn() content = %q, want %q", got.Content, "OK")
+	}
+	if client.startCalls != 1 {
+		t.Fatalf("Start() calls = %d, want %d", client.startCalls, 1)
+	}
+	if !client.started {
+		t.Fatal("expected StartThread() after Start()")
+	}
 }
 
 func TestRunner_ResumeFailureFallsBackToFreshWithSeededInput(t *testing.T) {
@@ -761,10 +792,10 @@ func TestRunner_ReadStatusProjectsContinuityMetadata(t *testing.T) {
 }
 
 type fakeRunnerClient struct {
+	startErr        error
 	resumeErr       error
 	resumeErrs      []error
 	startThreadID   string
-	startErr        error
 	runErr          error
 	assistantChunks []string
 	dynamicTools    []DynamicToolDefinition
@@ -781,6 +812,12 @@ type fakeRunnerClient struct {
 	runReq            RunTurnRequest
 	models            []ModelCatalogEntry
 	status            ClientStatus
+	startCalls        int
+}
+
+func (c *fakeRunnerClient) Start(context.Context) error {
+	c.startCalls++
+	return c.startErr
 }
 
 func (c *fakeRunnerClient) ResumeThread(_ context.Context, threadID string, dynamicTools []DynamicToolDefinition) error {

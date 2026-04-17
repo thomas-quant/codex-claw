@@ -42,6 +42,7 @@ type RunResult struct {
 }
 
 type RunnerClient interface {
+	Start(context.Context) error
 	ResumeThread(context.Context, string, []DynamicToolDefinition) error
 	StartThread(context.Context, string, []DynamicToolDefinition) (string, error)
 	RunTextTurn(context.Context, RunTurnRequest) (string, error)
@@ -68,7 +69,18 @@ func NewRunner(client RunnerClient, bindings *BindingStore) *Runner {
 	return &Runner{client: client, bindings: bindings, catalog: catalog}
 }
 
+func (r *Runner) ensureClientStarted(ctx context.Context) error {
+	if r.client == nil {
+		return fmt.Errorf("codexruntime: client not configured")
+	}
+	return r.client.Start(ctx)
+}
+
 func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, error) {
+	if err := r.ensureClientStarted(ctx); err != nil {
+		return RunResult{}, err
+	}
+
 	binding, ok, err := r.loadBinding(req.BindingKey)
 	if err != nil {
 		return RunResult{}, err
@@ -141,6 +153,10 @@ func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, er
 }
 
 func (r *Runner) CompactThread(ctx context.Context, bindingKey string) error {
+	if err := r.ensureClientStarted(ctx); err != nil {
+		return err
+	}
+
 	binding, ok, err := r.loadBinding(bindingKey)
 	if err != nil {
 		return err
@@ -168,8 +184,8 @@ func (r *Runner) ListModels(ctx context.Context) ([]ModelCatalogEntry, error) {
 }
 
 func (r *Runner) ReadRateLimits(ctx context.Context) ([]RateLimitSnapshot, error) {
-	if r.client == nil {
-		return nil, fmt.Errorf("codexruntime: client not configured")
+	if err := r.ensureClientStarted(ctx); err != nil {
+		return nil, err
 	}
 	return r.client.ReadRateLimits(ctx)
 }

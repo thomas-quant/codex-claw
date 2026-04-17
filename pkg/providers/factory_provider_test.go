@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/thomas-quant/codex-claw/pkg/codexaccounts"
@@ -74,7 +75,19 @@ func TestCreateProviderFromConfig_UsesManagedCodexRunner(t *testing.T) {
 	t.Setenv(config.EnvHome, t.TempDir())
 
 	originalClientFactory := newCodexRunnerClient
-	defer func() { newCodexRunnerClient = originalClientFactory }()
+	originalDefaultCodexHome := defaultCodexCLIHome
+	defer func() {
+		newCodexRunnerClient = originalClientFactory
+		defaultCodexCLIHome = originalDefaultCodexHome
+	}()
+
+	layout := codexaccounts.ResolveLayout(config.GetHome())
+	if err := os.MkdirAll(filepath.Dir(layout.LiveAuthFile), 0o700); err != nil {
+		t.Fatalf("MkdirAll(live auth dir) error = %v", err)
+	}
+	if err := os.WriteFile(layout.LiveAuthFile, []byte(`{"token":"managed"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(live auth) error = %v", err)
+	}
 
 	var gotWorkspace string
 	var gotTimeout int
@@ -117,9 +130,43 @@ func TestCreateProviderFromConfig_UsesManagedCodexRunner(t *testing.T) {
 		t.Fatalf("request timeout = %d, want %d", gotTimeout, cfg.RequestTimeout)
 	}
 
-	layout := codexaccounts.ResolveLayout(config.GetHome())
 	if gotEnv["CODEX_HOME"] != layout.CodexHome {
 		t.Fatalf("CODEX_HOME = %q, want %q", gotEnv["CODEX_HOME"], layout.CodexHome)
+	}
+}
+
+func TestCreateProviderFromConfig_FallsBackToDefaultCodexHomeWhenManagedHomeMissing(t *testing.T) {
+	t.Setenv(config.EnvHome, t.TempDir())
+
+	originalClientFactory := newCodexRunnerClient
+	originalDefaultCodexHome := defaultCodexCLIHome
+	defer func() {
+		newCodexRunnerClient = originalClientFactory
+		defaultCodexCLIHome = originalDefaultCodexHome
+	}()
+
+	fallbackHome := t.TempDir()
+	defaultCodexCLIHome = func() string { return fallbackHome }
+
+	var gotEnv map[string]string
+	newCodexRunnerClient = func(workspace string, requestTimeoutSeconds int, envOverrides map[string]string) codexruntime.RunnerClient {
+		gotEnv = map[string]string{}
+		for key, value := range envOverrides {
+			gotEnv[key] = value
+		}
+		return &stubRunnerClient{}
+	}
+
+	cfg := &config.ModelConfig{
+		ModelName: "codex-managed",
+		Model:     "codex/gpt-5.4",
+	}
+
+	if _, _, err := CreateProviderFromConfig(cfg); err != nil {
+		t.Fatalf("CreateProviderFromConfig() error = %v", err)
+	}
+	if gotEnv["CODEX_HOME"] != fallbackHome {
+		t.Fatalf("CODEX_HOME = %q, want %q", gotEnv["CODEX_HOME"], fallbackHome)
 	}
 }
 
@@ -146,7 +193,27 @@ func TestDeepSeekFallbackModelConfig_UsesRuntimeDefaults(t *testing.T) {
 	}
 }
 
+func TestDeepSeekFallbackModelConfig_DisabledWithoutAPIKey(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+
+	cfg := config.DefaultConfig()
+	cfg.Runtime.Fallback.DeepSeek.Enabled = true
+	cfg.Runtime.Fallback.DeepSeek.Model = "deepseek-chat"
+
+	modelCfg, ok := DeepSeekFallbackModelConfig(cfg)
+	if ok {
+		t.Fatalf("DeepSeekFallbackModelConfig() ok = true, want false (cfg=%#v)", modelCfg)
+	}
+	if modelCfg != nil {
+		t.Fatalf("DeepSeekFallbackModelConfig() = %#v, want nil", modelCfg)
+	}
+}
+
 type stubRunnerClient struct{}
+
+func (stubRunnerClient) Start(context.Context) error {
+	return nil
+}
 
 func (stubRunnerClient) ResumeThread(context.Context, string, []codexruntime.DynamicToolDefinition) error {
 	return nil

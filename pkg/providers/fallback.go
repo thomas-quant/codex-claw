@@ -111,6 +111,11 @@ func DeepSeekFallbackModelConfig(cfg *config.Config) (*config.ModelConfig, bool)
 		return nil, false
 	}
 
+	apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	if apiKey == "" {
+		return nil, false
+	}
+
 	model := strings.TrimSpace(cfg.Runtime.Fallback.DeepSeek.Model)
 	if model == "" {
 		model = "deepseek-chat"
@@ -125,7 +130,7 @@ func DeepSeekFallbackModelConfig(cfg *config.Config) (*config.ModelConfig, bool)
 		ModelName: "deepseek-fallback",
 		Model:     "deepseek/" + model,
 		APIKeyValue: func() config.SecureString {
-			return *config.NewSecureString(strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")))
+			return *config.NewSecureString(apiKey)
 		}(),
 		APIBase: apiBase,
 	}, true
