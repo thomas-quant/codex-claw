@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -556,6 +558,15 @@ func (c *Client) routeServerRequestLocked(ctx context.Context, req RunTurnReques
 			return err
 		}
 		return c.respondToServerRequestLocked(ctx, message, result)
+	case MethodItemToolRequestUserInput:
+		var params ToolRequestUserInputParams
+		if err := json.Unmarshal(message.Params, &params); err != nil {
+			return fmt.Errorf("codexruntime: decode %s params: %w", message.Method, err)
+		}
+		if params.ThreadID != req.ThreadID || params.TurnID != turnID {
+			return c.rejectServerRequestLocked(ctx, message, -32600, "request thread/turn mismatch")
+		}
+		return c.respondToServerRequestLocked(ctx, message, buildToolRequestUserInputResponse(params))
 	case MethodItemCommandExecutionRequestApproval:
 		var params CommandExecutionApprovalRequestParams
 		if err := json.Unmarshal(message.Params, &params); err != nil {
@@ -593,6 +604,16 @@ func (c *Client) routeServerRequestLocked(ctx context.Context, req RunTurnReques
 		result, err := handleApprovalRequest(message.Method, params)
 		if err != nil {
 			return err
+		}
+		return c.respondToServerRequestLocked(ctx, message, result)
+	case MethodAccountChatgptAuthTokensRefresh:
+		var params ChatgptAuthTokensRefreshParams
+		if err := json.Unmarshal(message.Params, &params); err != nil {
+			return fmt.Errorf("codexruntime: decode %s params: %w", message.Method, err)
+		}
+		result, err := readChatgptAuthTokensRefreshResponse()
+		if err != nil {
+			return c.rejectServerRequestLocked(ctx, message, -32000, err.Error())
 		}
 		return c.respondToServerRequestLocked(ctx, message, result)
 	default:
@@ -736,6 +757,63 @@ func rpcVersion(version string) string {
 	}
 
 	return "2.0"
+}
+
+func buildToolRequestUserInputResponse(params ToolRequestUserInputParams) ToolRequestUserInputResponse {
+	answers := make(map[string]ToolRequestUserInputAnswer, len(params.Questions))
+	for _, question := range params.Questions {
+		answer := ToolRequestUserInputAnswer{Answers: []string{}}
+		if question.ID == "" {
+			continue
+		}
+		if len(question.Options) > 0 && question.Options[0].Label != "" {
+			answer.Answers = []string{question.Options[0].Label}
+		}
+		answers[question.ID] = answer
+	}
+	return ToolRequestUserInputResponse{Answers: answers}
+}
+
+func readChatgptAuthTokensRefreshResponse() (ChatgptAuthTokensRefreshResponse, error) {
+	authPath, err := currentCodexAuthPath()
+	if err != nil {
+		return ChatgptAuthTokensRefreshResponse{}, err
+	}
+
+	raw, err := os.ReadFile(authPath)
+	if err != nil {
+		return ChatgptAuthTokensRefreshResponse{}, err
+	}
+
+	var payload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+			AccountID   string `json:"account_id"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ChatgptAuthTokensRefreshResponse{}, err
+	}
+	if payload.Tokens.AccessToken == "" || payload.Tokens.AccountID == "" {
+		return ChatgptAuthTokensRefreshResponse{}, fmt.Errorf("chatgpt auth tokens unavailable")
+	}
+
+	return ChatgptAuthTokensRefreshResponse{
+		AccessToken:      payload.Tokens.AccessToken,
+		ChatgptAccountID: payload.Tokens.AccountID,
+	}, nil
+}
+
+func currentCodexAuthPath() (string, error) {
+	if home := os.Getenv("CODEX_HOME"); home != "" {
+		return filepath.Join(home, "auth.json"), nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", fmt.Errorf("codexruntime: unable to resolve codex home")
+	}
+	return filepath.Join(home, ".codex", "auth.json"), nil
 }
 
 func (c *Client) nextRequestID() int64 {

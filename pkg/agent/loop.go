@@ -1460,6 +1460,9 @@ func resolveScopeKey(route routing.ResolvedRoute, msgSessionKey string) string {
 	if msgSessionKey != "" && strings.HasPrefix(msgSessionKey, sessionKeyAgentPrefix) {
 		return msgSessionKey
 	}
+	if route.Channel == "cli" && msgSessionKey != "" {
+		return msgSessionKey
+	}
 	return route.SessionKey
 }
 

@@ -2405,6 +2405,45 @@ func TestProcessMessage_HandledToolProcessesQueuedSteeringBeforeReturning(t *tes
 	}
 }
 
+func TestResolveScopeKey_PreservesExplicitCLISessionKey(t *testing.T) {
+	route := routing.ResolvedRoute{
+		AgentID:    "main",
+		Channel:    "cli",
+		SessionKey: "agent:main:main",
+	}
+
+	got := resolveScopeKey(route, "cli:custom")
+	if got != "cli:custom" {
+		t.Fatalf("resolveScopeKey() = %q, want %q", got, "cli:custom")
+	}
+}
+
+func TestResolveScopeKey_PreservesExplicitAgentScopedSessionKey(t *testing.T) {
+	route := routing.ResolvedRoute{
+		AgentID:    "main",
+		Channel:    "telegram",
+		SessionKey: "agent:main:telegram:peer",
+	}
+
+	got := resolveScopeKey(route, "agent:custom")
+	if got != "agent:custom" {
+		t.Fatalf("resolveScopeKey() = %q, want %q", got, "agent:custom")
+	}
+}
+
+func TestResolveScopeKey_UsesRouteSessionKeyForNonCLIKeys(t *testing.T) {
+	route := routing.ResolvedRoute{
+		AgentID:    "main",
+		Channel:    "telegram",
+		SessionKey: "agent:main:telegram:peer",
+	}
+
+	got := resolveScopeKey(route, "telegram:custom")
+	if got != route.SessionKey {
+		t.Fatalf("resolveScopeKey() = %q, want route session %q", got, route.SessionKey)
+	}
+}
+
 func TestProcessMessage_MediaArtifactCanBeForwardedBySendFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := config.DefaultConfig()

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -708,6 +710,116 @@ func TestClient_RunTextTurnHandlesPermissionsApprovalRequest(t *testing.T) {
 	}
 	if result["scope"] != "turn" {
 		t.Fatalf("approval scope = %#v, want %q", result["scope"], "turn")
+	}
+}
+
+func TestClient_RunTextTurnHandlesToolRequestUserInput(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","id":99,"method":"item/tool/requestUserInput","params":{"threadId":"thr_123","turnId":"turn_123","itemId":"input_1","questions":[{"header":"Mode","id":"mode","question":"Continue?","options":[{"label":"Yes","description":"continue"},{"label":"No","description":"stop"}]}]}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"completed","error":null}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 4 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 4)
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(writes[3], &response); err != nil {
+		t.Fatalf("decode request_user_input response: %v", err)
+	}
+	if got := string(response["id"]); got != "99" {
+		t.Fatalf("request_user_input response id = %s, want 99", got)
+	}
+
+	var result struct {
+		Answers map[string]struct {
+			Answers []string `json:"answers"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal(response["result"], &result); err != nil {
+		t.Fatalf("decode request_user_input result: %v", err)
+	}
+	if got := result.Answers["mode"].Answers; len(got) != 1 || got[0] != "Yes" {
+		t.Fatalf("request_user_input answers = %#v, want first option", result.Answers)
+	}
+}
+
+func TestClient_RunTextTurnHandlesChatgptAuthTokensRefresh(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "auth.json"), []byte(`{
+  "auth_mode": "chatgpt",
+  "tokens": {
+    "access_token": "access-token-123",
+    "account_id": "account-123"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(auth.json) error = %v", err)
+	}
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","id":99,"method":"account/chatgptAuthTokens/refresh","params":{"reason":"unauthorized","previousAccountId":"account-123"}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"completed","error":null}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "hi",
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 4 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 4)
+	}
+
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(writes[3], &response); err != nil {
+		t.Fatalf("decode auth refresh response: %v", err)
+	}
+	if got := string(response["id"]); got != "99" {
+		t.Fatalf("auth refresh response id = %s, want 99", got)
+	}
+
+	var result struct {
+		AccessToken      string `json:"accessToken"`
+		ChatgptAccountID string `json:"chatgptAccountId"`
+	}
+	if err := json.Unmarshal(response["result"], &result); err != nil {
+		t.Fatalf("decode auth refresh result: %v", err)
+	}
+	if result.AccessToken != "access-token-123" {
+		t.Fatalf("AccessToken = %q, want %q", result.AccessToken, "access-token-123")
+	}
+	if result.ChatgptAccountID != "account-123" {
+		t.Fatalf("ChatgptAccountID = %q, want %q", result.ChatgptAccountID, "account-123")
 	}
 }
 

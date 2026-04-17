@@ -17,12 +17,14 @@ const (
 	MethodThreadResume                        = "thread/resume"
 	MethodTurnStart                           = "turn/start"
 	MethodItemToolCall                        = "item/tool/call"
+	MethodItemToolRequestUserInput            = "item/tool/requestUserInput"
 	MethodItemCommandExecutionRequestApproval = "item/commandExecution/requestApproval"
 	MethodItemFileChangeRequestApproval       = "item/fileChange/requestApproval"
 	MethodItemPermissionsRequestApproval      = "item/permissions/requestApproval"
 	MethodItemAgentMessageDelta               = "item/agentMessage/delta"
 	MethodItemReasoningTextDelta              = "item/reasoning/textDelta"
 	MethodItemCompleted                       = "item/completed"
+	MethodAccountChatgptAuthTokensRefresh     = "account/chatgptAuthTokens/refresh"
 
 	ItemTypeAgentMessage      = "agent_message"
 	ItemTypeContextCompaction = "contextCompaction"
@@ -212,6 +214,46 @@ type PermissionsApprovalRequestParams struct {
 	TurnID               string         `json:"turn_id,omitempty"`
 	ConversationID       string         `json:"conversationId,omitempty"`
 	RequestedPermissions map[string]any `json:"permissions,omitempty"`
+}
+
+type ToolRequestUserInputParams struct {
+	ThreadID  string                         `json:"-"`
+	TurnID    string                         `json:"-"`
+	ItemID    string                         `json:"-"`
+	Questions []ToolRequestUserInputQuestion `json:"questions,omitempty"`
+}
+
+type ToolRequestUserInputQuestion struct {
+	Header   string                       `json:"header,omitempty"`
+	ID       string                       `json:"id,omitempty"`
+	Question string                       `json:"question,omitempty"`
+	IsOther  bool                         `json:"isOther,omitempty"`
+	IsSecret bool                         `json:"isSecret,omitempty"`
+	Options  []ToolRequestUserInputOption `json:"options,omitempty"`
+}
+
+type ToolRequestUserInputOption struct {
+	Label       string `json:"label,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type ToolRequestUserInputResponse struct {
+	Answers map[string]ToolRequestUserInputAnswer `json:"answers"`
+}
+
+type ToolRequestUserInputAnswer struct {
+	Answers []string `json:"answers"`
+}
+
+type ChatgptAuthTokensRefreshParams struct {
+	Reason            string `json:"reason,omitempty"`
+	PreviousAccountID string `json:"previousAccountId,omitempty"`
+}
+
+type ChatgptAuthTokensRefreshResponse struct {
+	AccessToken      string  `json:"accessToken"`
+	ChatgptAccountID string  `json:"chatgptAccountId"`
+	ChatgptPlanType  *string `json:"chatgptPlanType,omitempty"`
 }
 
 func (r *ThreadStartResult) UnmarshalJSON(data []byte) error {
@@ -404,6 +446,26 @@ func (p *PermissionsApprovalRequestParams) UnmarshalJSON(data []byte) error {
 	p.TurnID = firstProtocolValue(raw.TurnID, raw.TurnIDLegacy)
 	p.ConversationID = raw.ConversationID
 	p.RequestedPermissions = raw.RequestedPermissions
+	return nil
+}
+
+func (p *ToolRequestUserInputParams) UnmarshalJSON(data []byte) error {
+	type rawToolRequestUserInputParams struct {
+		ThreadID  string                         `json:"threadId"`
+		TurnID    string                         `json:"turnId"`
+		ItemID    string                         `json:"itemId"`
+		Questions []ToolRequestUserInputQuestion `json:"questions"`
+	}
+
+	var raw rawToolRequestUserInputParams
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.ThreadID = raw.ThreadID
+	p.TurnID = raw.TurnID
+	p.ItemID = raw.ItemID
+	p.Questions = raw.Questions
 	return nil
 }
 
