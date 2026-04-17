@@ -72,6 +72,21 @@ type channelWorker struct {
 	limiter    *rate.Limiter
 }
 
+type ChannelStartupState string
+
+const (
+	ChannelStartupStateDisabled    ChannelStartupState = "disabled"
+	ChannelStartupStateBlocked     ChannelStartupState = "blocked"
+	ChannelStartupStateInitialized ChannelStartupState = "initialized"
+	ChannelStartupStateStarted     ChannelStartupState = "started"
+)
+
+type ChannelStartupStatus struct {
+	Name   string
+	State  ChannelStartupState
+	Reason string
+}
+
 type Manager struct {
 	channels      map[string]Channel
 	workers       map[string]*channelWorker
@@ -87,6 +102,7 @@ type Manager struct {
 	reactionUndos sync.Map          // "channel:chatID" → reactionEntry
 	streamActive  sync.Map          // "channel:chatID" → true (set when streamer.Finalize sent the message)
 	channelHashes map[string]string // channel name → config hash
+	startupStatus map[string]ChannelStartupStatus
 }
 
 type asyncTask struct {
@@ -244,10 +260,13 @@ func NewManager(cfg *config.Config, messageBus *bus.MessageBus, store media.Medi
 		config:        cfg,
 		mediaStore:    store,
 		channelHashes: make(map[string]string),
+		startupStatus: make(map[string]ChannelStartupStatus),
 	}
 
 	// Register as streaming delegate so the agent loop can obtain streamers
 	messageBus.SetStreamDelegate(m)
+
+	m.refreshStartupStatus(&cfg.Channels)
 
 	if err := m.initChannels(&cfg.Channels); err != nil {
 		return nil, err
@@ -310,6 +329,7 @@ func (s *finalizeHookStreamer) Finalize(ctx context.Context, content string) err
 func (m *Manager) initChannel(name, displayName string) {
 	f, ok := getFactory(name)
 	if !ok {
+		m.setStartupStatus(name, ChannelStartupStateBlocked, "factory not registered")
 		logger.WarnCF("channels", "Factory not registered", map[string]any{
 			"channel": displayName,
 		})
@@ -320,6 +340,7 @@ func (m *Manager) initChannel(name, displayName string) {
 	})
 	ch, err := f(m.config, m.bus)
 	if err != nil {
+		m.setStartupStatus(name, ChannelStartupStateBlocked, fmt.Sprintf("failed to initialize: %v", err))
 		logger.ErrorCF("channels", "Failed to initialize channel", map[string]any{
 			"channel": displayName,
 			"error":   err.Error(),
@@ -340,6 +361,7 @@ func (m *Manager) initChannel(name, displayName string) {
 			setter.SetOwner(ch)
 		}
 		m.channels[name] = ch
+		m.setStartupStatus(name, ChannelStartupStateInitialized, "")
 		logger.InfoCF("channels", "Channel enabled successfully", map[string]any{
 			"channel": displayName,
 		})
@@ -438,7 +460,9 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	if len(m.channels) == 0 {
-		logger.WarnC("channels", "No channels enabled")
+		logger.WarnCF("channels", "No channels started", map[string]any{
+			"startup_statuses": m.startupStatusesSnapshot(),
+		})
 	}
 
 	logger.InfoC("channels", "Starting all channels")
@@ -453,6 +477,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 			"channel": name,
 		})
 		if err := channel.Start(ctx); err != nil {
+			m.setStartupStatus(name, ChannelStartupStateBlocked, fmt.Sprintf("failed to start: %v", err))
 			logger.ErrorCF("channels", "Failed to start channel", map[string]any{
 				"channel": name,
 				"error":   err.Error(),
@@ -464,6 +489,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		// Lazily create worker only after channel starts successfully
 		w := newChannelWorker(name, channel)
 		m.workers[name] = w
+		m.setStartupStatus(name, ChannelStartupStateStarted, "")
 		go m.runWorker(dispatchCtx, name, w)
 		go m.runMediaWorker(dispatchCtx, name, w)
 	}
@@ -990,6 +1016,35 @@ func (m *Manager) GetEnabledChannels() []string {
 	return names
 }
 
+func (m *Manager) GetStartedChannels() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	names := make([]string, 0, len(m.workers))
+	for name := range m.workers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (m *Manager) GetStartupStatuses() []ChannelStartupStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.startupStatusesSnapshot()
+}
+
+func (m *Manager) startupStatusesSnapshot() []ChannelStartupStatus {
+	statuses := make([]ChannelStartupStatus, 0, len(m.startupStatus))
+	for _, name := range []string{"telegram", "discord"} {
+		if status, ok := m.startupStatus[name]; ok {
+			statuses = append(statuses, status)
+		}
+	}
+	return statuses
+}
+
 // Reload updates the config reference without restarting channels.
 // This is used when channel config hasn't changed but other parts of the config have.
 func (m *Manager) Reload(ctx context.Context, cfg *config.Config) error {
@@ -1001,6 +1056,7 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config) error {
 
 	// Update config early: initChannel uses m.config via factory(m.config, m.bus).
 	m.config = cfg
+	m.refreshStartupStatus(&cfg.Channels)
 
 	list := toChannelHashes(cfg)
 	added, removed := compareChannels(m.channelHashes, list)
@@ -1044,6 +1100,7 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config) error {
 			"channel": name,
 		})
 		if err := channel.Start(ctx); err != nil {
+			m.setStartupStatus(name, ChannelStartupStateBlocked, fmt.Sprintf("failed to start: %v", err))
 			logger.ErrorCF("channels", "Failed to start channel", map[string]any{
 				"channel": name,
 				"error":   err.Error(),
@@ -1053,6 +1110,7 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config) error {
 		// Lazily create worker only after channel starts successfully
 		w := newChannelWorker(name, channel)
 		m.workers[name] = w
+		m.setStartupStatus(name, ChannelStartupStateStarted, "")
 		go m.runWorker(dispatchCtx, name, w)
 		go m.runMediaWorker(dispatchCtx, name, w)
 		deferFuncs = append(deferFuncs, func() {
@@ -1076,6 +1134,38 @@ func (m *Manager) RegisterChannel(name string, channel Channel) {
 	m.channels[name] = channel
 	if m.mux != nil {
 		m.registerChannelHTTPHandler(name, channel)
+	}
+}
+
+func (m *Manager) refreshStartupStatus(channels *config.ChannelsConfig) {
+	if channels == nil {
+		return
+	}
+
+	m.startupStatus = make(map[string]ChannelStartupStatus, 2)
+	m.refreshSingleStartupStatus("telegram", channels.Telegram.Enabled, channels.Telegram.Token.String())
+	m.refreshSingleStartupStatus("discord", channels.Discord.Enabled, channels.Discord.Token.String())
+}
+
+func (m *Manager) refreshSingleStartupStatus(name string, enabled bool, token string) {
+	switch {
+	case !enabled:
+		m.setStartupStatus(name, ChannelStartupStateDisabled, "disabled in config")
+	case token == "":
+		m.setStartupStatus(name, ChannelStartupStateBlocked, "enabled but token missing")
+	default:
+		m.setStartupStatus(name, ChannelStartupStateInitialized, "")
+	}
+}
+
+func (m *Manager) setStartupStatus(name string, state ChannelStartupState, reason string) {
+	if m.startupStatus == nil {
+		m.startupStatus = make(map[string]ChannelStartupStatus)
+	}
+	m.startupStatus[name] = ChannelStartupStatus{
+		Name:   name,
+		State:  state,
+		Reason: reason,
 	}
 }
 

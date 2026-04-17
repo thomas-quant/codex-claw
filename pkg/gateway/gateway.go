@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -64,8 +65,7 @@ func logChannelVoiceCapabilities(cm *channels.Manager, asrAvailable bool, ttsAva
 		return
 	}
 
-	names := cm.GetEnabledChannels()
-	sort.Strings(names)
+	names := cm.GetStartedChannels()
 	for _, name := range names {
 		ch, ok := cm.GetChannel(name)
 		if !ok {
@@ -328,7 +328,7 @@ func setupAndStartServices(
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return nil, fmt.Errorf("error starting heartbeat service: %w", err)
 	}
-	fmt.Println("✓ Heartbeat service started")
+	fmt.Println(heartbeatStartupLine(runningServices.HeartbeatService))
 
 	runningServices.MediaStore = media.NewFileMediaStoreWithCleanup(media.MediaCleanerConfig{
 		Enabled:  cfg.Tools.MediaCleanup.Enabled,
@@ -358,13 +358,6 @@ func setupAndStartServices(
 
 	ttsAvailable := tts.DetectTTS(cfg) != nil
 
-	enabledChannels := runningServices.ChannelManager.GetEnabledChannels()
-	if len(enabledChannels) > 0 {
-		fmt.Printf("✓ Channels enabled: %s\n", enabledChannels)
-	} else {
-		fmt.Println("⚠ Warning: No channels enabled")
-	}
-
 	addr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
 	runningServices.authToken = authToken
 	runningServices.HealthServer = health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port, authToken)
@@ -373,6 +366,10 @@ func setupAndStartServices(
 	if err = runningServices.ChannelManager.StartAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error starting channels: %w", err)
 	}
+	fmt.Println(formatChannelStartupSummary(
+		runningServices.ChannelManager.GetStartedChannels(),
+		runningServices.ChannelManager.GetStartupStatuses(),
+	))
 
 	logChannelVoiceCapabilities(runningServices.ChannelManager, transcriber != nil, ttsAvailable)
 
@@ -554,7 +551,7 @@ func restartServices(
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return fmt.Errorf("error restarting heartbeat service: %w", err)
 	}
-	fmt.Println("  ✓ Heartbeat service restarted")
+	fmt.Printf("  %s\n", heartbeatRestartLine(runningServices.HeartbeatService))
 
 	runningServices.MediaStore = media.NewFileMediaStoreWithCleanup(media.MediaCleanerConfig{
 		Enabled:  cfg.Tools.MediaCleanup.Enabled,
@@ -572,13 +569,10 @@ func restartServices(
 		return fmt.Errorf("error reload channels: %w", err)
 	}
 	fmt.Println("  ✓ Channels restarted.")
-
-	enabledChannels := runningServices.ChannelManager.GetEnabledChannels()
-	if len(enabledChannels) > 0 {
-		fmt.Printf("  ✓ Channels enabled: %s\n", enabledChannels)
-	} else {
-		fmt.Println("  ⚠ Warning: No channels enabled")
-	}
+	fmt.Printf("  %s\n", formatChannelStartupSummary(
+		runningServices.ChannelManager.GetStartedChannels(),
+		runningServices.ChannelManager.GetStartupStatuses(),
+	))
 
 	stateManager := state.NewManager(cfg.WorkspacePath())
 	runningServices.DeviceService = devices.NewService(devices.Config{
@@ -738,4 +732,40 @@ func createHeartbeatHandler(agentLoop *agent.AgentLoop) func(prompt, channel, ch
 		}
 		return tools.SilentResult(response)
 	}
+}
+
+func heartbeatStartupLine(service *heartbeat.HeartbeatService) string {
+	if service != nil && service.IsRunning() {
+		return "✓ Heartbeat service started"
+	}
+	return "• Heartbeat service disabled"
+}
+
+func heartbeatRestartLine(service *heartbeat.HeartbeatService) string {
+	if service != nil && service.IsRunning() {
+		return "✓ Heartbeat service restarted"
+	}
+	return "• Heartbeat service disabled"
+}
+
+func formatChannelStartupSummary(started []string, statuses []channels.ChannelStartupStatus) string {
+	if len(started) > 0 {
+		sorted := append([]string(nil), started...)
+		sort.Strings(sorted)
+		return fmt.Sprintf("✓ Channels enabled: %s", sorted)
+	}
+
+	reasons := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		if status.Reason == "" {
+			continue
+		}
+		reasons = append(reasons, fmt.Sprintf("%s: %s", status.Name, status.Reason))
+	}
+	sort.Strings(reasons)
+	if len(reasons) == 0 {
+		return "⚠ Warning: No channels started"
+	}
+
+	return fmt.Sprintf("⚠ Warning: No channels started (%s)", strings.Join(reasons, "; "))
 }

@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/thomas-quant/codex-claw/pkg/channels"
 	"github.com/thomas-quant/codex-claw/pkg/config"
+	"github.com/thomas-quant/codex-claw/pkg/heartbeat"
 )
 
 func TestRun_StartupFailuresReturnErrorAndEmitStructuredLog(t *testing.T) {
@@ -105,4 +107,55 @@ func TestGatewayRunStartupFailureHelper(t *testing.T) {
 
 	fmt.Fprintln(os.Stdout, err.Error())
 	os.Exit(0)
+}
+
+func TestHeartbeatStartupLine_Disabled(t *testing.T) {
+	t.Parallel()
+
+	service := heartbeat.NewHeartbeatService(t.TempDir(), 30, false)
+	if err := service.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	line := heartbeatStartupLine(service)
+	if strings.Contains(line, "started") {
+		t.Fatalf("heartbeatStartupLine() = %q, want no started wording for disabled service", line)
+	}
+	if !strings.Contains(line, "disabled") {
+		t.Fatalf("heartbeatStartupLine() = %q, want disabled wording", line)
+	}
+}
+
+func TestHeartbeatStartupLine_Enabled(t *testing.T) {
+	t.Parallel()
+
+	service := heartbeat.NewHeartbeatService(t.TempDir(), 30, true)
+	if err := service.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(service.Stop)
+
+	line := heartbeatStartupLine(service)
+	if !strings.Contains(line, "started") {
+		t.Fatalf("heartbeatStartupLine() = %q, want started wording", line)
+	}
+}
+
+func TestFormatChannelStartupSummary_NoStartedChannelsIncludesReasons(t *testing.T) {
+	t.Parallel()
+
+	line := formatChannelStartupSummary(nil, []channels.ChannelStartupStatus{
+		{Name: "discord", State: channels.ChannelStartupStateDisabled, Reason: "disabled in config"},
+		{Name: "telegram", State: channels.ChannelStartupStateBlocked, Reason: "enabled but token missing"},
+	})
+
+	if !strings.Contains(line, "No channels started") {
+		t.Fatalf("formatChannelStartupSummary() = %q, want no-started summary", line)
+	}
+	if !strings.Contains(line, "discord: disabled in config") {
+		t.Fatalf("formatChannelStartupSummary() = %q, want disabled-channel reason", line)
+	}
+	if !strings.Contains(line, "telegram: enabled but token missing") {
+		t.Fatalf("formatChannelStartupSummary() = %q, want missing-token reason", line)
+	}
 }
