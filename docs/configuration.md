@@ -59,8 +59,8 @@ The runtime is Codex-first. `runtime.codex` sets the default Codex model and tur
       "discovery_fallback_models": ["gpt-5.4", "gpt-5.4-mini"],
       "sandbox_mode": "workspace-write",
       "workspace_write": {
-        "writable_roots": ["/workspace", "/tmp"],
-        "network_access": true
+        "writable_roots": ["~/.codex-claw/workspace"],
+        "network_access": false
       }
     }
   }

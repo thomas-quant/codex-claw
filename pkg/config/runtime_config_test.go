@@ -75,7 +75,7 @@ func TestLoadConfig_RuntimeSandboxBlock(t *testing.T) {
       "default_model": "gpt-5.4",
       "sandbox_mode": "workspace-write",
       "workspace_write": {
-        "writable_roots": ["/workspace", "/tmp"],
+        "writable_roots": ["~/src/codex-claw", "~/tmp/shared"],
         "network_access": true
       }
     }
@@ -99,11 +99,11 @@ func TestLoadConfig_RuntimeSandboxBlock(t *testing.T) {
 			len(cfg.Runtime.Codex.WorkspaceWrite.WritableRoots),
 		)
 	}
-	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0]; got != "/workspace" {
-		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0] = %q, want %q", got, "/workspace")
+	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0]; got != "~/src/codex-claw" {
+		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0] = %q, want %q", got, "~/src/codex-claw")
 	}
-	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1]; got != "/tmp" {
-		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1] = %q, want %q", got, "/tmp")
+	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1]; got != "~/tmp/shared" {
+		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1] = %q, want %q", got, "~/tmp/shared")
 	}
 	if !cfg.Runtime.Codex.WorkspaceWrite.NetworkAccess {
 		t.Fatal("cfg.Runtime.Codex.WorkspaceWrite.NetworkAccess = false, want true")
