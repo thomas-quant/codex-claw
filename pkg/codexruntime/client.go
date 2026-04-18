@@ -302,6 +302,7 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 		SteerCh:  make(chan steerRequest, 1),
 	}
 	c.setActiveTurnLocked(active)
+	defer c.clearActiveTurn()
 
 	if err := c.callLocked(ctx, c.nextRequestID(), MethodTurnStart, TurnStartParams{
 		ThreadID:       req.ThreadID,
@@ -309,13 +310,11 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 		ApprovalPolicy: approvalPolicyPermanentYOLO,
 		SandboxPolicy:  req.SandboxPolicy,
 	}, &result); err != nil {
-		c.setTurnActiveLocked(false)
 		c.ioMu.Unlock()
 		return "", err
 	}
 	turnID := result.TurnID
 	if turnID == "" {
-		c.setTurnActiveLocked(false)
 		c.ioMu.Unlock()
 		return "", fmt.Errorf("codexruntime: turn/start returned empty turn_id")
 	}
@@ -325,7 +324,6 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 		return "", err
 	}
 	c.ioMu.Unlock()
-	defer c.clearActiveTurn()
 
 	projector := NewProjector(req.ThreadID, turnID)
 	for {
