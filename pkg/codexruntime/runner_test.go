@@ -379,6 +379,55 @@ func TestRunner_StartsClientBeforeFreshThread(t *testing.T) {
 	}
 }
 
+func TestRunner_RunTextTurnForwardsStructuredInputAndSandboxPolicy(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeRunnerClient{
+		startThreadID:   "thr_new",
+		assistantChunks: []string{"OK"},
+	}
+	runner := NewRunner(client, NewBindingStore(t.TempDir()))
+
+	got, err := runner.RunTextTurn(context.Background(), RunRequest{
+		BindingKey: "cli:diag",
+		Model:      "gpt-5.4-mini",
+		InputText:  "legacy text should not win",
+		Input: []TurnInputItem{
+			{Type: "text", Text: "structured"},
+			{Type: "localImage", Path: "/tmp/context.txt"},
+		},
+		SandboxPolicy: &SandboxPolicy{
+			Type:          "workspaceWrite",
+			WritableRoots: []string{"/repo"},
+			NetworkAccess: false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+	if got.Content != "OK" {
+		t.Fatalf("RunTextTurn() content = %q, want %q", got.Content, "OK")
+	}
+	if !slices.Equal(client.runReq.Input, []TurnInputItem{
+		{Type: "text", Text: "structured"},
+		{Type: "localImage", Path: "/tmp/context.txt"},
+	}) {
+		t.Fatalf("RunTextTurn() input = %#v, want structured input items", client.runReq.Input)
+	}
+	if client.runReq.SandboxPolicy == nil {
+		t.Fatal("RunTextTurn() sandboxPolicy = nil, want payload")
+	}
+	if client.runReq.SandboxPolicy.Type != "workspaceWrite" {
+		t.Fatalf("RunTextTurn() sandboxPolicy.type = %q, want %q", client.runReq.SandboxPolicy.Type, "workspaceWrite")
+	}
+	if !slices.Equal(client.runReq.SandboxPolicy.WritableRoots, []string{"/repo"}) {
+		t.Fatalf("RunTextTurn() sandboxPolicy.writableRoots = %v, want %v", client.runReq.SandboxPolicy.WritableRoots, []string{"/repo"})
+	}
+	if client.runReq.SandboxPolicy.NetworkAccess {
+		t.Fatal("RunTextTurn() sandboxPolicy.networkAccess = true, want false")
+	}
+}
+
 func TestRunner_ResumeFailureFallsBackToFreshWithSeededInput(t *testing.T) {
 	t.Parallel()
 

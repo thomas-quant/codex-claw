@@ -457,6 +457,85 @@ func TestClient_RunTextTurnUsesCurrentAppServerTurnSchema(t *testing.T) {
 	}
 }
 
+func TestClient_RunTextTurnUsesStructuredInputAndSandboxPolicy(t *testing.T) {
+	t.Parallel()
+
+	transport := newScriptedTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"completed","error":null}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+		ThreadID:  "thr_123",
+		InputText: "legacy text should not win",
+		Input: []TurnInputItem{
+			{Type: "text", Text: "hello"},
+			{Type: "image", URL: "https://example.com/cat.png"},
+			{Type: "localImage", Path: "/tmp/data.txt"},
+		},
+		SandboxPolicy: &SandboxPolicy{
+			Type:          "workspaceWrite",
+			WritableRoots: []string{"/repo", "/tmp"},
+			NetworkAccess: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 3 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 3)
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			ThreadID       string          `json:"threadId"`
+			Input          []TurnInputItem `json:"input"`
+			SandboxPolicy  *SandboxPolicy  `json:"sandboxPolicy"`
+			ApprovalPolicy string          `json:"approvalPolicy"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(writes[2], &envelope); err != nil {
+		t.Fatalf("decode turn/start request: %v", err)
+	}
+	if envelope.Method != MethodTurnStart {
+		t.Fatalf("turn/start method = %q, want %q", envelope.Method, MethodTurnStart)
+	}
+	if envelope.Params.ThreadID != "thr_123" {
+		t.Fatalf("turn/start threadId = %q, want %q", envelope.Params.ThreadID, "thr_123")
+	}
+	if !slices.Equal(envelope.Params.Input, []TurnInputItem{
+		{Type: "text", Text: "hello"},
+		{Type: "image", URL: "https://example.com/cat.png"},
+		{Type: "localImage", Path: "/tmp/data.txt"},
+	}) {
+		t.Fatalf("turn/start input = %#v, want structured input items", envelope.Params.Input)
+	}
+	if envelope.Params.SandboxPolicy == nil {
+		t.Fatal("turn/start sandboxPolicy = nil, want payload")
+	}
+	if envelope.Params.SandboxPolicy.Type != "workspaceWrite" {
+		t.Fatalf("turn/start sandboxPolicy.type = %q, want %q", envelope.Params.SandboxPolicy.Type, "workspaceWrite")
+	}
+	if !slices.Equal(envelope.Params.SandboxPolicy.WritableRoots, []string{"/repo", "/tmp"}) {
+		t.Fatalf("turn/start sandboxPolicy.writableRoots = %v, want %v", envelope.Params.SandboxPolicy.WritableRoots, []string{"/repo", "/tmp"})
+	}
+	if !envelope.Params.SandboxPolicy.NetworkAccess {
+		t.Fatal("turn/start sandboxPolicy.networkAccess = false, want true")
+	}
+	if envelope.Params.ApprovalPolicy != approvalPolicyPermanentYOLO {
+		t.Fatalf("turn/start approvalPolicy = %q, want %q", envelope.Params.ApprovalPolicy, approvalPolicyPermanentYOLO)
+	}
+}
+
 func TestClient_RunTextTurnHandlesNestedTurnCompletedShape(t *testing.T) {
 	t.Parallel()
 
@@ -992,6 +1071,67 @@ func TestClient_RunTextTurnRejectsReentrantClientCallsDuringChunkCallback(t *tes
 	}
 }
 
+func TestClient_SteerTurnUsesExpectedTurnID(t *testing.T) {
+	t.Parallel()
+
+	transport := newGatedScriptedTransport(2, MethodTurnSteer,
+		`{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.120.0"}}}`,
+		`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn_123"}}}`,
+		`{"jsonrpc":"2.0","id":3,"result":{"turnId":"turn_123"}}`,
+		`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thr_123","turn":{"id":"turn_123","status":"completed","error":null}}}`,
+	)
+	client := NewClient(transport, ClientOptions{RequestTimeout: time.Second})
+
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
+			ThreadID: "thr_123",
+			Input:    []TurnInputItem{{Type: "text", Text: "start"}},
+		})
+		done <- err
+	}()
+
+	if err := client.SteerTurn(context.Background(), "thr_123", []TurnInputItem{{Type: "text", Text: "actually focus on tests"}}); err != nil {
+		t.Fatalf("SteerTurn() error = %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("RunTextTurn() error = %v", err)
+	}
+
+	writes := transport.Writes()
+	if len(writes) != 4 {
+		t.Fatalf("Writes() len = %d, want %d", len(writes), 4)
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			ThreadID       string          `json:"threadId"`
+			Input          []TurnInputItem `json:"input"`
+			ExpectedTurnID string          `json:"expectedTurnId"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(writes[3], &envelope); err != nil {
+		t.Fatalf("decode turn/steer request: %v", err)
+	}
+	if envelope.Method != MethodTurnSteer {
+		t.Fatalf("turn/steer method = %q, want %q", envelope.Method, MethodTurnSteer)
+	}
+	if envelope.Params.ThreadID != "thr_123" {
+		t.Fatalf("turn/steer threadId = %q, want %q", envelope.Params.ThreadID, "thr_123")
+	}
+	if envelope.Params.ExpectedTurnID != "turn_123" {
+		t.Fatalf("turn/steer expectedTurnId = %q, want %q", envelope.Params.ExpectedTurnID, "turn_123")
+	}
+	if !slices.Equal(envelope.Params.Input, []TurnInputItem{{Type: "text", Text: "actually focus on tests"}}) {
+		t.Fatalf("turn/steer input = %#v, want steer input item", envelope.Params.Input)
+	}
+}
+
 func TestClient_RunTextTurnRejectsToolCallRequestWithThreadMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -1141,29 +1281,76 @@ type scriptedConn struct {
 	reads   [][]byte
 	writes  [][]byte
 	readErr error
+
+	readCount     int
+	gateReadIndex int
+	gateMethod    string
+	gateCh        chan struct{}
+	gateOnce      sync.Once
 }
 
-func (c *scriptedConn) Read(context.Context) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func newGatedScriptedTransport(gateReadIndex int, gateMethod string, responses ...string) *scriptedTransport {
+	transport := newScriptedTransport(responses...)
+	transport.conn.gateReadIndex = gateReadIndex
+	transport.conn.gateMethod = gateMethod
+	transport.conn.gateCh = make(chan struct{})
+	return transport
+}
 
-	if len(c.reads) == 0 {
-		if c.readErr == nil {
-			return nil, context.DeadlineExceeded
+func (c *scriptedConn) Read(ctx context.Context) ([]byte, error) {
+	for {
+		c.mu.Lock()
+		if c.gateCh != nil && c.readCount == c.gateReadIndex {
+			gateCh := c.gateCh
+			c.gateCh = nil
+			c.gateReadIndex = -1
+			c.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-gateCh:
+			}
+			continue
 		}
-		return nil, c.readErr
-	}
 
-	next := c.reads[0]
-	c.reads = c.reads[1:]
-	return next, nil
+		if len(c.reads) == 0 {
+			c.mu.Unlock()
+			if c.readErr == nil {
+				return nil, context.DeadlineExceeded
+			}
+			return nil, c.readErr
+		}
+
+		next := c.reads[0]
+		c.reads = c.reads[1:]
+		c.readCount++
+		c.mu.Unlock()
+		return next, nil
+	}
 }
 
 func (c *scriptedConn) Write(_ context.Context, payload []byte) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.writes = append(c.writes, append([]byte(nil), payload...))
+	gateMethod := c.gateMethod
+	gateCh := c.gateCh
+	c.mu.Unlock()
+
+	if gateMethod == "" || gateCh == nil {
+		return nil
+	}
+
+	var envelope struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return nil
+	}
+	if envelope.Method == gateMethod {
+		c.gateOnce.Do(func() {
+			close(gateCh)
+		})
+	}
 	return nil
 }
 

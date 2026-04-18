@@ -29,6 +29,8 @@ type RunRequest struct {
 	BindingKey     string
 	Model          string
 	InputText      string
+	Input          []TurnInputItem
+	SandboxPolicy  *SandboxPolicy
 	Recovery       RecoveryRequest
 	Control        ControlRequest
 	DynamicTools   []DynamicToolDefinition
@@ -128,6 +130,8 @@ func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, er
 	content, err := r.client.RunTextTurn(ctx, RunTurnRequest{
 		ThreadID:       threadID,
 		InputText:      req.InputText,
+		Input:          req.Input,
+		SandboxPolicy:  req.SandboxPolicy,
 		HandleToolCall: req.HandleToolCall,
 		OnChunk:        req.OnChunk,
 	})
@@ -174,6 +178,21 @@ func (r *Runner) CompactThread(ctx context.Context, bindingKey string) error {
 	}
 	binding.Metadata[bindingMetadataLastCompactionAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	return r.bindings.Save(binding)
+}
+
+func (r *Runner) SteerTurn(ctx context.Context, threadID string, input []TurnInputItem) error {
+	if err := r.ensureClientStarted(ctx); err != nil {
+		return err
+	}
+
+	steerer, ok := r.client.(interface {
+		SteerTurn(context.Context, string, []TurnInputItem) error
+	})
+	if !ok {
+		return fmt.Errorf("codexruntime: client does not support turn steering")
+	}
+
+	return steerer.SteerTurn(ctx, threadID, input)
 }
 
 func (r *Runner) ListModels(ctx context.Context) ([]ModelCatalogEntry, error) {

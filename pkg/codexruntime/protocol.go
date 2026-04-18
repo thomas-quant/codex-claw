@@ -16,6 +16,7 @@ const (
 	MethodThreadCompacted                     = "thread/compacted"
 	MethodThreadResume                        = "thread/resume"
 	MethodTurnStart                           = "turn/start"
+	MethodTurnSteer                           = "turn/steer"
 	MethodItemToolCall                        = "item/tool/call"
 	MethodItemToolRequestUserInput            = "item/tool/requestUserInput"
 	MethodItemCommandExecutionRequestApproval = "item/commandExecution/requestApproval"
@@ -129,12 +130,21 @@ type ThreadCompactStartParams struct {
 type TurnInputItem struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
+	URL  string `json:"url,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
+type SandboxPolicy struct {
+	Type          string   `json:"type,omitempty"`
+	WritableRoots []string `json:"writableRoots,omitempty"`
+	NetworkAccess bool     `json:"networkAccess,omitempty"`
 }
 
 type TurnStartParams struct {
 	ThreadID       string          `json:"threadId"`
 	Input          []TurnInputItem `json:"input,omitempty"`
 	ApprovalPolicy string          `json:"approvalPolicy,omitempty"`
+	SandboxPolicy  *SandboxPolicy  `json:"sandboxPolicy,omitempty"`
 }
 
 type TurnStartResult struct {
@@ -142,6 +152,12 @@ type TurnStartResult struct {
 	Turn   struct {
 		ID string `json:"id"`
 	} `json:"turn,omitempty"`
+}
+
+type TurnSteerParams struct {
+	ThreadID       string          `json:"threadId"`
+	Input          []TurnInputItem `json:"input,omitempty"`
+	ExpectedTurnID string          `json:"expectedTurnId"`
 }
 
 type AgentMessageDeltaParams struct {

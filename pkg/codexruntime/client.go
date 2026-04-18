@@ -14,6 +14,7 @@ import (
 
 var errClientNotStarted = errors.New("codexruntime: client not started")
 var errClientTurnInProgress = errors.New("codexruntime: turn in progress")
+var errClientNoActiveTurn = errors.New("codexruntime: no active turn")
 
 const methodTurnCompleted = "turn/completed"
 
@@ -42,14 +43,30 @@ type Client struct {
 	conn       Conn
 	pending    []messageEnvelope
 	turnActive bool
+	activeTurn *activeTurnState
 	nextID     atomic.Int64
 }
 
 type RunTurnRequest struct {
 	ThreadID       string
 	InputText      string
+	Input          []TurnInputItem
+	SandboxPolicy  *SandboxPolicy
 	HandleToolCall ToolCallHandler
 	OnChunk        func(string)
+}
+
+type steerRequest struct {
+	threadID string
+	input    []TurnInputItem
+	resultCh chan error
+}
+
+type activeTurnState struct {
+	ThreadID string
+	TurnID   string
+	SteerCh  chan steerRequest
+	ReadCancel context.CancelFunc
 }
 
 func NewClient(transport Transport, opts ClientOptions) *Client {
@@ -212,6 +229,51 @@ func (c *Client) StartNativeCompaction(ctx context.Context, threadID string) err
 	return c.Call(ctx, MethodThreadCompactStart, ThreadCompactStartParams{ThreadID: threadID}, nil)
 }
 
+func (c *Client) SteerTurn(ctx context.Context, threadID string, input []TurnInputItem) error {
+	active := c.activeTurnState()
+	waitFor := c.opts.RequestTimeout
+	if waitFor <= 0 {
+		waitFor = time.Second
+	}
+	deadline := time.NewTimer(waitFor)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for active == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return errClientNoActiveTurn
+		case <-ticker.C:
+		}
+		active = c.activeTurnState()
+	}
+	if active.ThreadID != threadID {
+		return fmt.Errorf("codexruntime: active turn thread mismatch: got %s want %s", threadID, active.ThreadID)
+	}
+
+	req := steerRequest{
+		threadID: threadID,
+		input:    append([]TurnInputItem(nil), input...),
+		resultCh: make(chan error, 1),
+	}
+
+	select {
+	case active.SteerCh <- req:
+		c.wakeActiveTurnReader()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	select {
+	case err := <-req.resultCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (c *Client) Status() ClientStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -235,34 +297,56 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 		c.ioMu.Unlock()
 		return "", errClientNotStarted
 	}
-	c.setTurnActiveLocked(true)
+	active := &activeTurnState{
+		ThreadID: req.ThreadID,
+		SteerCh:  make(chan steerRequest, 1),
+	}
+	c.setActiveTurnLocked(active)
 
 	if err := c.callLocked(ctx, c.nextRequestID(), MethodTurnStart, TurnStartParams{
 		ThreadID:       req.ThreadID,
-		Input:          []TurnInputItem{{Type: "text", Text: req.InputText}},
+		Input:          buildTurnInput(req.Input, req.InputText),
 		ApprovalPolicy: approvalPolicyPermanentYOLO,
+		SandboxPolicy:  req.SandboxPolicy,
 	}, &result); err != nil {
 		c.setTurnActiveLocked(false)
 		c.ioMu.Unlock()
 		return "", err
 	}
-	c.ioMu.Unlock()
-	defer c.setTurnActive(false)
-
 	turnID := result.TurnID
 	if turnID == "" {
+		c.setTurnActiveLocked(false)
+		c.ioMu.Unlock()
 		return "", fmt.Errorf("codexruntime: turn/start returned empty turn_id")
 	}
+	active.TurnID = turnID
+	if err := c.drainPendingSteerLocked(ctx, req); err != nil {
+		c.ioMu.Unlock()
+		return "", err
+	}
+	c.ioMu.Unlock()
+	defer c.clearActiveTurn()
 
 	projector := NewProjector(req.ThreadID, turnID)
 	for {
 		c.ioMu.Lock()
-		message, err := c.readMessageLocked(ctx)
+		if err := c.drainPendingSteerLocked(ctx, req); err != nil {
+			c.ioMu.Unlock()
+			return "", err
+		}
+		readCtx, cancelRead := context.WithCancel(ctx)
+		c.setActiveReadCancel(cancelRead)
+		message, err := c.readMessageLocked(readCtx)
+		c.clearActiveReadCancel()
+		cancelRead()
 		if err == nil && isServerRequest(message) {
 			err = c.routeServerRequestLocked(ctx, req, turnID, message)
 		}
 		c.ioMu.Unlock()
 		if err != nil {
+			if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+				continue
+			}
 			return "", err
 		}
 		if message.Method == "" {
@@ -303,6 +387,14 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 		}
 	}
 
+}
+
+func buildTurnInput(input []TurnInputItem, inputText string) []TurnInputItem {
+	if len(input) > 0 {
+		return append([]TurnInputItem(nil), input...)
+	}
+
+	return []TurnInputItem{{Type: "text", Text: inputText}}
 }
 
 type requestEnvelope struct {
@@ -424,6 +516,84 @@ func (c *Client) callLocked(ctx context.Context, id int64, method string, params
 		return err
 	}
 
+	if envelope.Error != nil {
+		responseID, idErr := decodeNumericID(envelope.ID)
+		if idErr != nil {
+			return idErr
+		}
+		if responseID != id {
+			return fmt.Errorf("codexruntime: %s response id = %d, want %d", method, responseID, id)
+		}
+		if envelope.Error.Message == "" {
+			return fmt.Errorf("codexruntime: %s failed", method)
+		}
+		return fmt.Errorf("codexruntime: %s failed: %s", method, envelope.Error.Message)
+	}
+	responseID, err := decodeNumericID(envelope.ID)
+	if err != nil {
+		return err
+	}
+	if responseID != id {
+		return fmt.Errorf("codexruntime: %s response id = %d, want %d", method, responseID, id)
+	}
+	if result == nil || len(envelope.Result) == 0 {
+		return nil
+	}
+
+	if err := json.Unmarshal(envelope.Result, result); err != nil {
+		return fmt.Errorf("codexruntime: decode %s result: %w", method, err)
+	}
+
+	return nil
+}
+
+func (c *Client) callDuringTurnLocked(
+	ctx context.Context,
+	id int64,
+	method string,
+	params any,
+	result any,
+	req RunTurnRequest,
+	turnID string,
+) error {
+	callCtx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
+	if err := c.writeLocked(callCtx, requestEnvelope{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  method,
+		Params:  params,
+	}); err != nil {
+		return err
+	}
+
+	for {
+		message, err := c.readMessageLocked(callCtx)
+		if err != nil {
+			return err
+		}
+		if message.Method == "" {
+			envelope := responseEnvelope{
+				JSONRPC: message.JSONRPC,
+				ID:      message.ID,
+				Result:  message.Result,
+				Error:   message.Error,
+			}
+			return decodeCallResult(envelope, id, method, result)
+		}
+		if isServerRequest(message) {
+			if err := c.routeServerRequestLocked(callCtx, req, turnID, message); err != nil {
+				return err
+			}
+			continue
+		}
+
+		c.pending = append(c.pending, message)
+	}
+}
+
+func decodeCallResult(envelope responseEnvelope, id int64, method string, result any) error {
 	if envelope.Error != nil {
 		responseID, idErr := decodeNumericID(envelope.ID)
 		if idErr != nil {
@@ -694,6 +864,39 @@ func decodeNotification(message messageEnvelope) (Notification, error) {
 	return notification, nil
 }
 
+func (c *Client) drainPendingSteerLocked(ctx context.Context, req RunTurnRequest) error {
+	active := c.activeTurnState()
+	if active == nil {
+		return nil
+	}
+
+	select {
+	case steer := <-active.SteerCh:
+		err := c.handleSteerRequestLocked(ctx, req, active, steer)
+		steer.resultCh <- err
+		return err
+	default:
+		return nil
+	}
+}
+
+func (c *Client) handleSteerRequestLocked(
+	ctx context.Context,
+	req RunTurnRequest,
+	active *activeTurnState,
+	steer steerRequest,
+) error {
+	if active.ThreadID != steer.threadID {
+		return fmt.Errorf("codexruntime: active turn thread mismatch: got %s want %s", steer.threadID, active.ThreadID)
+	}
+
+	return c.callDuringTurnLocked(ctx, c.nextRequestID(), MethodTurnSteer, TurnSteerParams{
+		ThreadID:       steer.threadID,
+		Input:          append([]TurnInputItem(nil), steer.input...),
+		ExpectedTurnID: active.TurnID,
+	}, nil, req, active.TurnID)
+}
+
 func (c *Client) closeLocked() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -722,11 +925,78 @@ func (c *Client) setTurnActive(active bool) {
 	c.turnActive = active
 }
 
+func (c *Client) isTurnActive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.turnActive
+}
+
+func (c *Client) activeTurnState() *activeTurnState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.activeTurn
+}
+
+func (c *Client) clearActiveTurn() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.activeTurn != nil {
+		c.activeTurn.ReadCancel = nil
+	}
+	c.activeTurn = nil
+	c.turnActive = false
+}
+
+func (c *Client) setActiveTurnLocked(active *activeTurnState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.activeTurn = active
+	c.turnActive = active != nil
+}
+
+func (c *Client) setActiveReadCancel(cancel context.CancelFunc) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.activeTurn != nil {
+		c.activeTurn.ReadCancel = cancel
+	}
+}
+
+func (c *Client) clearActiveReadCancel() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.activeTurn != nil {
+		c.activeTurn.ReadCancel = nil
+	}
+}
+
+func (c *Client) wakeActiveTurnReader() {
+	c.mu.Lock()
+	cancel := context.CancelFunc(nil)
+	if c.activeTurn != nil {
+		cancel = c.activeTurn.ReadCancel
+	}
+	c.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+}
+
 func (c *Client) setTurnActiveLocked(active bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.turnActive = active
+	if !active {
+		c.activeTurn = nil
+	}
 }
 
 func (c *Client) hasConnLocked() bool {
