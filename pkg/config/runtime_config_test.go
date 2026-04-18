@@ -66,6 +66,50 @@ func TestLoadConfig_RuntimeBlockOnly(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RuntimeSandboxBlock(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	raw := `{
+  "runtime": {
+    "codex": {
+      "default_model": "gpt-5.4",
+      "sandbox_mode": "workspace-write",
+      "workspace_write": {
+        "writable_roots": ["/workspace", "/tmp"],
+        "network_access": true
+      }
+    }
+  }
+}`
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+
+	if got := cfg.Runtime.Codex.SandboxMode; got != "workspace-write" {
+		t.Fatalf("cfg.Runtime.Codex.SandboxMode = %q, want %q", got, "workspace-write")
+	}
+	if len(cfg.Runtime.Codex.WorkspaceWrite.WritableRoots) != 2 {
+		t.Fatalf(
+			"cfg.Runtime.Codex.WorkspaceWrite.WritableRoots len = %d, want 2",
+			len(cfg.Runtime.Codex.WorkspaceWrite.WritableRoots),
+		)
+	}
+	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0]; got != "/workspace" {
+		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[0] = %q, want %q", got, "/workspace")
+	}
+	if got := cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1]; got != "/tmp" {
+		t.Fatalf("cfg.Runtime.Codex.WorkspaceWrite.WritableRoots[1] = %q, want %q", got, "/tmp")
+	}
+	if !cfg.Runtime.Codex.WorkspaceWrite.NetworkAccess {
+		t.Fatal("cfg.Runtime.Codex.WorkspaceWrite.NetworkAccess = false, want true")
+	}
+}
+
 func TestLoadConfig_RejectsLegacyProviderKeys(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")

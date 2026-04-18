@@ -56,11 +56,18 @@ The runtime is Codex-first. `runtime.codex` sets the default Codex model and tur
       "default_thinking": "medium",
       "fast": false,
       "auto_compact_threshold_percent": 30,
-      "discovery_fallback_models": ["gpt-5.4", "gpt-5.4-mini"]
+      "discovery_fallback_models": ["gpt-5.4", "gpt-5.4-mini"],
+      "sandbox_mode": "workspace-write",
+      "workspace_write": {
+        "writable_roots": ["/workspace", "/tmp"],
+        "network_access": true
+      }
     }
   }
 }
 ```
+
+`runtime.codex.sandbox_mode` and `runtime.codex.workspace_write.*` are forwarded to Codex app-server turn requests. Fast-mode alignment is tracked separately and is not part of this runtime sandbox surface.
 
 `runtime.fallback.deepseek` is the only built-in fallback path. It carries the model id and API base only. DeepSeek auth should come from your external secret or env setup, not from `config.json`.
 

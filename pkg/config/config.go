@@ -29,12 +29,19 @@ type RuntimeConfig struct {
 	Fallback RuntimeFallbackConfig `json:"fallback,omitempty" yaml:"fallback,omitempty"`
 }
 
+type CodexWorkspaceWriteConfig struct {
+	WritableRoots []string `json:"writable_roots,omitempty" yaml:"writable_roots,omitempty"`
+	NetworkAccess bool     `json:"network_access,omitempty" yaml:"network_access,omitempty"`
+}
+
 type CodexRuntimeConfig struct {
-	DefaultModel                string   `json:"default_model" yaml:"default_model"`
-	DefaultThinking             string   `json:"default_thinking,omitempty" yaml:"default_thinking,omitempty"`
-	Fast                        bool     `json:"fast,omitempty" yaml:"fast,omitempty"`
-	AutoCompactThresholdPercent int      `json:"auto_compact_threshold_percent,omitempty" yaml:"auto_compact_threshold_percent,omitempty"`
-	DiscoveryFallbackModels     []string `json:"discovery_fallback_models,omitempty" yaml:"discovery_fallback_models,omitempty"`
+	DefaultModel                string                    `json:"default_model" yaml:"default_model"`
+	DefaultThinking             string                    `json:"default_thinking,omitempty" yaml:"default_thinking,omitempty"`
+	Fast                        bool                      `json:"fast,omitempty" yaml:"fast,omitempty"`
+	AutoCompactThresholdPercent int                       `json:"auto_compact_threshold_percent,omitempty" yaml:"auto_compact_threshold_percent,omitempty"`
+	DiscoveryFallbackModels     []string                  `json:"discovery_fallback_models,omitempty" yaml:"discovery_fallback_models,omitempty"`
+	SandboxMode                 string                    `json:"sandbox_mode,omitempty" yaml:"sandbox_mode,omitempty"`
+	WorkspaceWrite              CodexWorkspaceWriteConfig `json:"workspace_write,omitempty" yaml:"workspace_write,omitempty"`
 }
 
 type RuntimeFallbackConfig struct {
