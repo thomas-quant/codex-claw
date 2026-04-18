@@ -1322,6 +1322,89 @@ func TestAgentLoop_InteractiveProviderPassesThreadRuntimeControl(t *testing.T) {
 	}
 }
 
+func TestAgentLoop_InteractiveProviderPassesStructuredInputItemsAndSandboxPolicy(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 10,
+			},
+		},
+		Runtime: config.RuntimeConfig{
+			Codex: config.CodexRuntimeConfig{
+				SandboxMode: "workspace-write",
+				WorkspaceWrite: config.CodexWorkspaceWriteConfig{
+					WritableRoots: []string{"/repo", "/tmp/shared"},
+					NetworkAccess: true,
+				},
+			},
+		},
+	}
+
+	store := media.NewFileMediaStore()
+	imagePath := filepath.Join(tmpDir, "input.png")
+	pngHeader := []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
+		0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE,
+	}
+	if err := os.WriteFile(imagePath, pngHeader, 0o644); err != nil {
+		t.Fatalf("WriteFile(imagePath) error = %v", err)
+	}
+	ref, err := store.Store(imagePath, media.MediaMeta{ContentType: "image/png"}, "test")
+	if err != nil {
+		t.Fatalf("Store(imagePath) error = %v", err)
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &interactiveLoopProvider{
+		finalContent: "done",
+	}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	al.SetMediaStore(store)
+
+	response, err := al.processMessage(context.Background(), bus.InboundMessage{
+		Channel:  "telegram",
+		ChatID:   "chat-1",
+		SenderID: "user-1",
+		Content:  "describe this image",
+		Media:    []string{ref},
+	})
+	if err != nil {
+		t.Fatalf("processMessage() error = %v", err)
+	}
+	if response != "done" {
+		t.Fatalf("response = %q, want %q", response, "done")
+	}
+
+	_, interactiveCalled, reqs, _ := provider.snapshot()
+	if !interactiveCalled || len(reqs) != 1 {
+		t.Fatalf("interactive provider requests = %d, want 1", len(reqs))
+	}
+	if !slices.Equal(reqs[0].InputItems, []providers.InteractiveInputItem{
+		{Type: "text", Text: "describe this image"},
+		{Type: "localImage", Path: imagePath},
+	}) {
+		t.Fatalf("request input_items = %#v, want text + local image path", reqs[0].InputItems)
+	}
+	if reqs[0].SandboxPolicy == nil {
+		t.Fatal("request sandbox_policy = nil, want workspace-write policy")
+	}
+	if reqs[0].SandboxPolicy.Mode != "workspace-write" {
+		t.Fatalf("request sandbox_policy.mode = %q, want %q", reqs[0].SandboxPolicy.Mode, "workspace-write")
+	}
+	if !slices.Equal(reqs[0].SandboxPolicy.WritableRoots, []string{"/repo", "/tmp/shared"}) {
+		t.Fatalf("request sandbox_policy.writable_roots = %v, want %v", reqs[0].SandboxPolicy.WritableRoots, []string{"/repo", "/tmp/shared"})
+	}
+	if !reqs[0].SandboxPolicy.NetworkAccess {
+		t.Fatal("request sandbox_policy.network_access = false, want true")
+	}
+}
+
 func TestAgentLoop_InteractiveProviderBootstrapsFreshThreadFromHistory(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.Config{
@@ -4762,6 +4845,47 @@ func TestResolveMediaRefs_MixedImageAndFile(t *testing.T) {
 	expectedContent := "check these [file:" + pdfPath + "]"
 	if result[0].Content != expectedContent {
 		t.Fatalf("expected content %q, got %q", expectedContent, result[0].Content)
+	}
+}
+
+func TestBuildInteractiveInputItems_ResolvesMediaRefsToLocalImages(t *testing.T) {
+	store := media.NewFileMediaStore()
+	dir := t.TempDir()
+
+	pngPath := filepath.Join(dir, "photo.png")
+	pngHeader := []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+		0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
+		0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE,
+	}
+	if err := os.WriteFile(pngPath, pngHeader, 0o644); err != nil {
+		t.Fatalf("WriteFile(pngPath) error = %v", err)
+	}
+	imageRef, err := store.Store(pngPath, media.MediaMeta{ContentType: "image/png"}, "test")
+	if err != nil {
+		t.Fatalf("Store(pngPath) error = %v", err)
+	}
+
+	pdfPath := filepath.Join(dir, "report.pdf")
+	if err := os.WriteFile(pdfPath, []byte("%PDF-1.4"), 0o644); err != nil {
+		t.Fatalf("WriteFile(pdfPath) error = %v", err)
+	}
+	fileRef, err := store.Store(pdfPath, media.MediaMeta{ContentType: "application/pdf"}, "test")
+	if err != nil {
+		t.Fatalf("Store(pdfPath) error = %v", err)
+	}
+
+	items, err := buildInteractiveInputItems("describe this", []string{imageRef, fileRef}, store)
+	if err != nil {
+		t.Fatalf("buildInteractiveInputItems() error = %v", err)
+	}
+
+	if !slices.Equal(items, []providers.InteractiveInputItem{
+		{Type: "text", Text: "describe this"},
+		{Type: "localImage", Path: pngPath},
+	}) {
+		t.Fatalf("buildInteractiveInputItems() = %#v, want text + local image only", items)
 	}
 }
 

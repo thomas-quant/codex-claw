@@ -651,7 +651,7 @@ func (al *AgentLoop) drainBusToSteering(ctx context.Context, activeScope, active
 				"scope":       activeScope,
 			})
 
-		if err := al.enqueueSteeringMessage(activeScope, activeAgentID, providers.Message{
+		if err := al.steerMessage(ctx, activeScope, activeAgentID, providers.Message{
 			Role:    "user",
 			Content: msg.Content,
 			Media:   append([]string(nil), msg.Media...),
@@ -1773,6 +1773,18 @@ func (al *AgentLoop) runTurn(ctx context.Context, ts *turnState) (turnResult, er
 	)
 
 	cfg := al.GetConfig()
+	interactiveInputItems, err := buildInteractiveInputItems(ts.userMessage, ts.media, al.mediaStore)
+	if err != nil {
+		return turnResult{}, err
+	}
+	var interactiveSandboxPolicy *providers.InteractiveSandboxPolicy
+	if strings.TrimSpace(cfg.Runtime.Codex.SandboxMode) != "" {
+		interactiveSandboxPolicy = &providers.InteractiveSandboxPolicy{
+			Mode:          cfg.Runtime.Codex.SandboxMode,
+			WritableRoots: append([]string(nil), cfg.Runtime.Codex.WorkspaceWrite.WritableRoots...),
+			NetworkAccess: cfg.Runtime.Codex.WorkspaceWrite.NetworkAccess,
+		}
+	}
 	maxMediaSize := cfg.Agents.Defaults.GetMaxMediaSize()
 	messages = resolveMediaRefs(messages, al.mediaStore, maxMediaSize)
 
@@ -2181,15 +2193,27 @@ turnLoop:
 						}
 					}
 				}
+				if steerProvider, ok := activeProvider.(providers.InteractiveTurnSteerer); ok {
+					ts.setNativeInteractiveSteer(func(ctx context.Context, msg providers.Message) error {
+						items, err := buildInteractiveInputItems(msg.Content, msg.Media, al.mediaStore)
+						if err != nil {
+							return err
+						}
+						return steerProvider.SteerInteractiveTurn(ctx, threadControlReq, items)
+					})
+					defer ts.clearNativeInteractiveSteer()
+				}
 				resp, err := interactiveProvider.RunInteractiveTurn(providerCtx, providers.InteractiveTurnRequest{
-					SessionKey: ts.sessionKey,
-					AgentID:    ts.agent.ID,
-					Channel:    ts.channel,
-					ChatID:     ts.chatID,
-					Model:      llmModel,
-					Messages:   messagesForCall,
-					Tools:      toolDefsForCall,
-					Options:    llmOpts,
+					SessionKey:    ts.sessionKey,
+					AgentID:       ts.agent.ID,
+					Channel:       ts.channel,
+					ChatID:        ts.chatID,
+					Model:         llmModel,
+					Messages:      messagesForCall,
+					InputItems:    interactiveInputItems,
+					SandboxPolicy: interactiveSandboxPolicy,
+					Tools:         toolDefsForCall,
+					Options:       llmOpts,
 					Recovery: providers.InteractiveRecoveryRequest{
 						AllowServerRestart: true,
 						AllowResume:        true,

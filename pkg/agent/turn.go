@@ -69,12 +69,13 @@ type turnState struct {
 
 	followUps []bus.InboundMessage
 
-	gracefulInterrupt     bool
-	gracefulInterruptHint string
-	gracefulTerminalUsed  bool
-	hardAbort             bool
-	providerCancel        context.CancelFunc
-	turnCancel            context.CancelFunc
+	gracefulInterrupt      bool
+	gracefulInterruptHint  string
+	gracefulTerminalUsed   bool
+	hardAbort              bool
+	providerCancel         context.CancelFunc
+	turnCancel             context.CancelFunc
+	nativeInteractiveSteer func(context.Context, providers.Message) error
 
 	restorePointHistory []providers.Message
 	restorePointSummary string
@@ -248,6 +249,24 @@ func (ts *turnState) clearProviderCancel(_ context.CancelFunc) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.providerCancel = nil
+}
+
+func (ts *turnState) setNativeInteractiveSteer(fn func(context.Context, providers.Message) error) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.nativeInteractiveSteer = fn
+}
+
+func (ts *turnState) clearNativeInteractiveSteer() {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.nativeInteractiveSteer = nil
+}
+
+func (ts *turnState) nativeInteractiveSteerFunc() func(context.Context, providers.Message) error {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return ts.nativeInteractiveSteer
 }
 
 func (ts *turnState) requestGracefulInterrupt(hint string) bool {

@@ -57,14 +57,8 @@ func (p *CodexAppServerProvider) RunInteractiveTurn(
 		return nil, fmt.Errorf("codex app server runner not configured")
 	}
 
-	inputText := req.RecoveryBootstrapInput
-	if inputText == "" {
-		inputText = req.BootstrapInput
-	}
-	if inputText == "" {
-		inputText = lastUserMessageContent(req.Messages)
-	}
-	if inputText == "" {
+	inputItems := buildInteractiveTurnInputItems(req)
+	if len(inputItems) == 0 {
 		return nil, fmt.Errorf("interactive turn requires bootstrap input or a user message")
 	}
 
@@ -77,9 +71,10 @@ func (p *CodexAppServerProvider) RunInteractiveTurn(
 	}
 
 	result, err := p.runner.RunTextTurn(ctx, codexruntime.RunRequest{
-		BindingKey: interactiveBindingKey(req),
-		Model:      req.Model,
-		InputText:  inputText,
+		BindingKey:    interactiveBindingKey(req),
+		Model:         req.Model,
+		Input:         inputItems,
+		SandboxPolicy: mapInteractiveSandboxPolicy(req.SandboxPolicy),
 		Recovery: codexruntime.RecoveryRequest{
 			AllowServerRestart: req.Recovery.AllowServerRestart,
 			AllowResume:        req.Recovery.AllowResume,
@@ -97,6 +92,39 @@ func (p *CodexAppServerProvider) RunInteractiveTurn(
 		Content:      result.Content,
 		FinishReason: "stop",
 	}, nil
+}
+
+func (p *CodexAppServerProvider) SteerInteractiveTurn(
+	ctx context.Context,
+	req InteractiveThreadControlRequest,
+	input []InteractiveInputItem,
+) error {
+	if p.runner == nil {
+		return fmt.Errorf("codex app server runner not configured")
+	}
+
+	bindingKey := interactiveBindingKey(InteractiveTurnRequest{
+		SessionKey: req.SessionKey,
+		AgentID:    req.AgentID,
+		Channel:    req.Channel,
+		ChatID:     req.ChatID,
+	})
+	status, err := p.runner.ReadStatus(ctx, bindingKey)
+	if err != nil {
+		return err
+	}
+	if status.ThreadID == "" {
+		return fmt.Errorf("interactive thread has no active thread id")
+	}
+
+	steerer, ok := p.runner.(interface {
+		SteerTurn(context.Context, string, []codexruntime.TurnInputItem) error
+	})
+	if !ok {
+		return fmt.Errorf("codex app server runner does not support turn steering")
+	}
+
+	return steerer.SteerTurn(ctx, status.ThreadID, mapInteractiveInputItems(input))
 }
 
 func (p *CodexAppServerProvider) CompactThread(ctx context.Context, req InteractiveThreadControlRequest) error {
@@ -245,6 +273,63 @@ func mapDynamicTools(tools []ToolDefinition) []codexruntime.DynamicToolDefinitio
 	}
 
 	return mapped
+}
+
+func buildInteractiveTurnInputItems(req InteractiveTurnRequest) []codexruntime.TurnInputItem {
+	if len(req.InputItems) > 0 {
+		return mapInteractiveInputItems(req.InputItems)
+	}
+
+	inputText := req.RecoveryBootstrapInput
+	if inputText == "" {
+		inputText = req.BootstrapInput
+	}
+	if inputText == "" {
+		inputText = lastUserMessageContent(req.Messages)
+	}
+	if inputText == "" {
+		return nil
+	}
+
+	return []codexruntime.TurnInputItem{{Type: "text", Text: inputText}}
+}
+
+func mapInteractiveInputItems(items []InteractiveInputItem) []codexruntime.TurnInputItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	mapped := make([]codexruntime.TurnInputItem, 0, len(items))
+	for _, item := range items {
+		if item.Type == "" {
+			continue
+		}
+		mapped = append(mapped, codexruntime.TurnInputItem{
+			Type: item.Type,
+			Text: item.Text,
+			URL:  item.URL,
+			Path: item.Path,
+		})
+	}
+
+	return mapped
+}
+
+func mapInteractiveSandboxPolicy(policy *InteractiveSandboxPolicy) *codexruntime.SandboxPolicy {
+	if policy == nil {
+		return nil
+	}
+
+	sandboxType := policy.Mode
+	if sandboxType == "workspace-write" {
+		sandboxType = "workspaceWrite"
+	}
+
+	return &codexruntime.SandboxPolicy{
+		Type:          sandboxType,
+		WritableRoots: append([]string(nil), policy.WritableRoots...),
+		NetworkAccess: policy.NetworkAccess,
+	}
 }
 
 func mapInteractiveToolExecutor(executor InteractiveToolExecutor) codexruntime.ToolCallHandler {

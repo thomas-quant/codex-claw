@@ -39,6 +39,19 @@ type InteractiveContentItem struct {
 	ImageURL string
 }
 
+type InteractiveInputItem struct {
+	Type string
+	Text string
+	URL  string
+	Path string
+}
+
+type InteractiveSandboxPolicy struct {
+	Mode          string
+	WritableRoots []string
+	NetworkAccess bool
+}
+
 type InteractiveToolCall struct {
 	CallID    string
 	Name      string
@@ -111,6 +124,8 @@ type InteractiveTurnRequest struct {
 	Options                map[string]any
 	BootstrapInput         string
 	RecoveryBootstrapInput string
+	InputItems             []InteractiveInputItem
+	SandboxPolicy          *InteractiveSandboxPolicy
 	Recovery               InteractiveRecoveryRequest
 	Control                InteractiveControlRequest
 	OnChunk                func(string)
@@ -121,6 +136,10 @@ type InteractiveTurnRequest struct {
 // stateful turn loop outside the stateless Chat interface.
 type InteractiveProvider interface {
 	RunInteractiveTurn(context.Context, InteractiveTurnRequest) (*LLMResponse, error)
+}
+
+type InteractiveTurnSteerer interface {
+	SteerInteractiveTurn(context.Context, InteractiveThreadControlRequest, []InteractiveInputItem) error
 }
 
 type InteractiveThreadController interface {

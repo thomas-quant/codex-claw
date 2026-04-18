@@ -177,6 +177,23 @@ func (al *AgentLoop) Steer(msg providers.Message) error {
 		scope = ts.sessionKey
 		agentID = ts.agentID
 	}
+	return al.steerMessage(context.Background(), scope, agentID, msg)
+}
+
+func (al *AgentLoop) steerMessage(ctx context.Context, scope, agentID string, msg providers.Message) error {
+	if ts := al.getActiveTurnState(scope); ts != nil {
+		if nativeSteer := ts.nativeInteractiveSteerFunc(); nativeSteer != nil {
+			if err := nativeSteer(ctx, msg); err == nil {
+				return nil
+			} else {
+				logger.WarnCF("agent", "Native steer failed, falling back to queue", map[string]any{
+					"error": err.Error(),
+					"scope": normalizeSteeringScope(scope),
+				})
+			}
+		}
+	}
+
 	return al.enqueueSteeringMessage(scope, agentID, msg)
 }
 

@@ -87,6 +87,34 @@ func resolveMediaRefs(messages []providers.Message, store media.MediaStore, maxS
 	return result
 }
 
+func buildInteractiveInputItems(
+	userText string,
+	mediaRefs []string,
+	store media.MediaStore,
+) ([]providers.InteractiveInputItem, error) {
+	items := make([]providers.InteractiveInputItem, 0, 1+len(mediaRefs))
+	if strings.TrimSpace(userText) != "" {
+		items = append(items, providers.InteractiveInputItem{Type: "text", Text: userText})
+	}
+
+	if store == nil {
+		return items, nil
+	}
+
+	for _, ref := range mediaRefs {
+		localPath, meta, err := store.ResolveWithMeta(ref)
+		if err != nil {
+			return nil, err
+		}
+
+		if mime := detectMIME(localPath, meta); strings.HasPrefix(mime, "image/") {
+			items = append(items, providers.InteractiveInputItem{Type: "localImage", Path: localPath})
+		}
+	}
+
+	return items, nil
+}
+
 func buildArtifactTags(store media.MediaStore, refs []string) []string {
 	if store == nil || len(refs) == 0 {
 		return nil

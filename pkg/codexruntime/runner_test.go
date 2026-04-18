@@ -31,7 +31,7 @@ func TestRunner_ResumeFallsBackToStart(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hi",
+		Input:      []TurnInputItem{{Type: "text", Text: "hi"}},
 		Recovery: RecoveryRequest{
 			AllowResume: true,
 		},
@@ -97,7 +97,7 @@ func TestRunner_ResumedThreadKeepsStoredModel(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hi",
+		Input:      []TurnInputItem{{Type: "text", Text: "hi"}},
 		Recovery: RecoveryRequest{
 			AllowResume: true,
 		},
@@ -152,7 +152,7 @@ func TestRunner_ZeroValueRecoveryStartsFreshThread(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hi",
+		Input:      []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -183,7 +183,7 @@ func TestRunner_FreshThreadSavesRequestedModel(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hi",
+		Input:      []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -232,7 +232,7 @@ func TestRunner_RestartsThenRetriesResumeBeforeStartingFresh(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hi",
+		Input:      []TurnInputItem{{Type: "text", Text: "hi"}},
 		Recovery: RecoveryRequest{
 			AllowServerRestart: true,
 			AllowResume:        true,
@@ -288,7 +288,7 @@ func TestRunner_ForceFreshThreadSkipsResumeAndStartsNewThread(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "bootstrap payload",
+		Input:      []TurnInputItem{{Type: "text", Text: "bootstrap payload"}},
 		Recovery: RecoveryRequest{
 			AllowResume:        true,
 			AllowServerRestart: true,
@@ -363,7 +363,7 @@ func TestRunner_StartsClientBeforeFreshThread(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "cli:diag",
 		Model:      "gpt-5.4-mini",
-		InputText:  "Reply with OK and nothing else.",
+		Input:      []TurnInputItem{{Type: "text", Text: "Reply with OK and nothing else."}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -391,7 +391,6 @@ func TestRunner_RunTextTurnForwardsStructuredInputAndSandboxPolicy(t *testing.T)
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "cli:diag",
 		Model:      "gpt-5.4-mini",
-		InputText:  "legacy text should not win",
 		Input: []TurnInputItem{
 			{Type: "text", Text: "structured"},
 			{Type: "localImage", Path: "/tmp/context.txt"},
@@ -450,7 +449,10 @@ func TestRunner_ResumeFailureFallsBackToFreshWithSeededInput(t *testing.T) {
 	got, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Input: []TurnInputItem{{
+			Type: "text",
+			Text: "USER: old\nASSISTANT: old reply\nUSER: current",
+		}},
 		Recovery: RecoveryRequest{
 			AllowResume:        true,
 			AllowServerRestart: true,
@@ -517,7 +519,10 @@ func TestRunner_ResumeFallbackPreservesStoredFastEnabledWhenRequestOmitsIt(t *te
 	_, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Input: []TurnInputItem{{
+			Type: "text",
+			Text: "USER: old\nASSISTANT: old reply\nUSER: current",
+		}},
 		Recovery: RecoveryRequest{
 			AllowResume:        true,
 			AllowServerRestart: true,
@@ -562,7 +567,10 @@ func TestRunner_ResumeFallbackClearsStoredFastEnabledWhenRequestExplicitlyDisabl
 	_, err := runner.RunTextTurn(context.Background(), RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "USER: old\nASSISTANT: old reply\nUSER: current",
+		Input: []TurnInputItem{{
+			Type: "text",
+			Text: "USER: old\nASSISTANT: old reply\nUSER: current",
+		}},
 		Recovery: RecoveryRequest{
 			AllowResume:        true,
 			AllowServerRestart: true,
@@ -890,7 +898,9 @@ func (c *fakeRunnerClient) StartThread(_ context.Context, _ string, dynamicTools
 func (c *fakeRunnerClient) RunTextTurn(_ context.Context, req RunTurnRequest) (string, error) {
 	c.runReq = req
 	c.runThreadID = req.ThreadID
-	c.runInput = req.InputText
+	if len(req.Input) > 0 {
+		c.runInput = req.Input[0].Text
+	}
 
 	content := ""
 	for _, chunk := range c.assistantChunks {

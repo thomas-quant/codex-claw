@@ -42,7 +42,7 @@ func TestCoordinator_HardSwitchUpdatesActiveAliasBeforeRestart(t *testing.T) {
 	_, err := coord.RunTextTurn(context.Background(), codexruntime.RunRequest{
 		BindingKey: "telegram:chat-1:coder",
 		Model:      "gpt-5.4",
-		InputText:  "hello",
+		Input:      []codexruntime.TurnInputItem{{Type: "text", Text: "hello"}},
 	})
 	if err == nil {
 		t.Fatal("RunTextTurn() error = nil, want hard-switch retry failure surfaced")

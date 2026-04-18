@@ -49,7 +49,6 @@ type Client struct {
 
 type RunTurnRequest struct {
 	ThreadID       string
-	InputText      string
 	Input          []TurnInputItem
 	SandboxPolicy  *SandboxPolicy
 	HandleToolCall ToolCallHandler
@@ -63,9 +62,9 @@ type steerRequest struct {
 }
 
 type activeTurnState struct {
-	ThreadID string
-	TurnID   string
-	SteerCh  chan steerRequest
+	ThreadID   string
+	TurnID     string
+	SteerCh    chan steerRequest
 	ReadCancel context.CancelFunc
 }
 
@@ -306,7 +305,7 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 
 	if err := c.callLocked(ctx, c.nextRequestID(), MethodTurnStart, TurnStartParams{
 		ThreadID:       req.ThreadID,
-		Input:          buildTurnInput(req.Input, req.InputText),
+		Input:          buildTurnInput(req.Input),
 		ApprovalPolicy: approvalPolicyPermanentYOLO,
 		SandboxPolicy:  req.SandboxPolicy,
 	}, &result); err != nil {
@@ -387,12 +386,12 @@ func (c *Client) RunTextTurn(ctx context.Context, req RunTurnRequest) (string, e
 
 }
 
-func buildTurnInput(input []TurnInputItem, inputText string) []TurnInputItem {
+func buildTurnInput(input []TurnInputItem) []TurnInputItem {
 	if len(input) > 0 {
 		return append([]TurnInputItem(nil), input...)
 	}
 
-	return []TurnInputItem{{Type: "text", Text: inputText}}
+	return nil
 }
 
 type requestEnvelope struct {

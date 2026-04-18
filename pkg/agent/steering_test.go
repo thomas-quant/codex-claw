@@ -431,6 +431,104 @@ func TestDrainBusToSteering_RequeuesDifferentScopeMessage(t *testing.T) {
 	}
 }
 
+func TestDrainBusToSteering_UsesNativeSteerBeforeQueueFallback(t *testing.T) {
+	al, _, msgBus, _, cleanup := newTestAgentLoop(t)
+	defer cleanup()
+
+	activeMsg := bus.InboundMessage{
+		Channel:  "telegram",
+		SenderID: "user1",
+		ChatID:   "chat1",
+		Content:  "focus on tests",
+		Peer: bus.Peer{
+			Kind: "direct",
+			ID:   "user1",
+		},
+	}
+	activeScope, activeAgentID, ok := al.resolveSteeringTarget(activeMsg)
+	if !ok {
+		t.Fatal("expected active message to resolve to a steering scope")
+	}
+
+	var got providers.Message
+	ts := &turnState{
+		agentID:    activeAgentID,
+		sessionKey: activeScope,
+	}
+	ts.setNativeInteractiveSteer(func(ctx context.Context, msg providers.Message) error {
+		got = msg
+		return nil
+	})
+	al.registerActiveTurn(ts)
+	defer al.clearActiveTurn(ts)
+
+	if err := msgBus.PublishInbound(context.Background(), activeMsg); err != nil {
+		t.Fatalf("PublishInbound failed: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	al.drainBusToSteering(ctx, activeScope, activeAgentID)
+
+	if got.Role != "user" || got.Content != "focus on tests" {
+		t.Fatalf("native steer message = %+v, want user focus message", got)
+	}
+	if msgs := al.dequeueSteeringMessagesForScope(activeScope); len(msgs) != 0 {
+		t.Fatalf("expected no queued steering after native steer success, got %v", msgs)
+	}
+}
+
+func TestDrainBusToSteering_FallsBackToQueueWhenNativeSteerFails(t *testing.T) {
+	al, _, msgBus, _, cleanup := newTestAgentLoop(t)
+	defer cleanup()
+
+	activeMsg := bus.InboundMessage{
+		Channel:  "telegram",
+		SenderID: "user1",
+		ChatID:   "chat1",
+		Content:  "queue this after native fail",
+		Peer: bus.Peer{
+			Kind: "direct",
+			ID:   "user1",
+		},
+	}
+	activeScope, activeAgentID, ok := al.resolveSteeringTarget(activeMsg)
+	if !ok {
+		t.Fatal("expected active message to resolve to a steering scope")
+	}
+
+	nativeCalls := 0
+	ts := &turnState{
+		agentID:    activeAgentID,
+		sessionKey: activeScope,
+	}
+	ts.setNativeInteractiveSteer(func(ctx context.Context, msg providers.Message) error {
+		nativeCalls++
+		return fmt.Errorf("native steer failed")
+	})
+	al.registerActiveTurn(ts)
+	defer al.clearActiveTurn(ts)
+
+	if err := msgBus.PublishInbound(context.Background(), activeMsg); err != nil {
+		t.Fatalf("PublishInbound failed: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	al.drainBusToSteering(ctx, activeScope, activeAgentID)
+
+	if nativeCalls != 1 {
+		t.Fatalf("native steer calls = %d, want 1", nativeCalls)
+	}
+	msgs := al.dequeueSteeringMessagesForScope(activeScope)
+	if len(msgs) != 1 {
+		t.Fatalf("queued steering messages = %v, want exactly one fallback message", msgs)
+	}
+	if msgs[0].Role != "user" || msgs[0].Content != "queue this after native fail" {
+		t.Fatalf("queued steering message = %+v, want original user message", msgs[0])
+	}
+}
+
 // slowTool simulates a tool that takes some time to execute.
 type slowTool struct {
 	name     string

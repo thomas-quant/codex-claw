@@ -82,7 +82,9 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T)
 	wantReq := codexruntime.RunRequest{
 		BindingKey: "session-1:agent-7",
 		Model:      "gpt-5.4",
-		InputText:  "last user message",
+		Input: []codexruntime.TurnInputItem{
+			{Type: "text", Text: "last user message"},
+		},
 		DynamicTools: []codexruntime.DynamicToolDefinition{
 			{
 				Name:        "lookup_weather",
@@ -100,8 +102,8 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsRequest(t *testing.T)
 	if runner.gotReq.Model != wantReq.Model {
 		t.Fatalf("runner model = %q, want %q", runner.gotReq.Model, wantReq.Model)
 	}
-	if runner.gotReq.InputText != wantReq.InputText {
-		t.Fatalf("runner input_text = %q, want %q", runner.gotReq.InputText, wantReq.InputText)
+	if !slices.Equal(runner.gotReq.Input, wantReq.Input) {
+		t.Fatalf("runner input = %#v, want %#v", runner.gotReq.Input, wantReq.Input)
 	}
 	if !runner.gotReq.Recovery.AllowServerRestart || !runner.gotReq.Recovery.AllowResume {
 		t.Fatalf("runner recovery = %#v, want restart+resume enabled", runner.gotReq.Recovery)
@@ -153,8 +155,10 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsBootstrapInput(t *tes
 		t.Fatalf("RunInteractiveTurn() error = %v", err)
 	}
 
-	if runner.gotReq.InputText != "USER:first\nASSISTANT:reply\nUSER:current" {
-		t.Fatalf("RunInteractiveTurn() input_text = %q, want bootstrap payload", runner.gotReq.InputText)
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "USER:first\nASSISTANT:reply\nUSER:current"},
+	}) {
+		t.Fatalf("RunInteractiveTurn() input = %#v, want bootstrap text input item", runner.gotReq.Input)
 	}
 }
 
@@ -180,8 +184,95 @@ func TestCodexAppServerProvider_RunInteractiveTurn_PreservesBootstrapInputVerbat
 		t.Fatalf("RunInteractiveTurn() error = %v", err)
 	}
 
-	if runner.gotReq.InputText != bootstrapInput {
-		t.Fatalf("RunInteractiveTurn() input_text = %q, want %q", runner.gotReq.InputText, bootstrapInput)
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: bootstrapInput},
+	}) {
+		t.Fatalf("RunInteractiveTurn() input = %#v, want bootstrap text input item", runner.gotReq.Input)
+	}
+}
+
+func TestCodexAppServerProvider_RunInteractiveTurn_ForwardsInputItemsAndSandboxPolicy(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		result: codexruntime.RunResult{
+			Content: "assistant reply",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+		Model:      "gpt-5.4",
+		Messages: []Message{
+			{Role: "user", Content: "fallback text should not win"},
+		},
+		InputItems: []InteractiveInputItem{
+			{Type: "text", Text: "structured text"},
+			{Type: "localImage", Path: "/tmp/shot.png"},
+		},
+		SandboxPolicy: &InteractiveSandboxPolicy{
+			Mode:          "workspace-write",
+			WritableRoots: []string{"/repo", "/tmp/shared"},
+			NetworkAccess: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunInteractiveTurn() error = %v", err)
+	}
+
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "structured text"},
+		{Type: "localImage", Path: "/tmp/shot.png"},
+	}) {
+		t.Fatalf("runner input = %#v, want structured input items", runner.gotReq.Input)
+	}
+	if runner.gotReq.SandboxPolicy == nil {
+		t.Fatal("runner sandbox_policy = nil, want forwarded policy")
+	}
+	if runner.gotReq.SandboxPolicy.Type != "workspaceWrite" {
+		t.Fatalf("runner sandbox_policy.type = %q, want %q", runner.gotReq.SandboxPolicy.Type, "workspaceWrite")
+	}
+	if !slices.Equal(runner.gotReq.SandboxPolicy.WritableRoots, []string{"/repo", "/tmp/shared"}) {
+		t.Fatalf("runner sandbox_policy.writable_roots = %v, want %v", runner.gotReq.SandboxPolicy.WritableRoots, []string{"/repo", "/tmp/shared"})
+	}
+	if !runner.gotReq.SandboxPolicy.NetworkAccess {
+		t.Fatal("runner sandbox_policy.network_access = false, want true")
+	}
+}
+
+func TestCodexAppServerProvider_RunInteractiveTurn_PrefersExplicitInputItems(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		result: codexruntime.RunResult{
+			Content: "assistant reply",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+
+	_, err := provider.RunInteractiveTurn(context.Background(), InteractiveTurnRequest{
+		SessionKey:             "session-1",
+		AgentID:                "agent-7",
+		Model:                  "gpt-5.4",
+		BootstrapInput:         "bootstrap text",
+		RecoveryBootstrapInput: "recovery bootstrap text",
+		Messages: []Message{
+			{Role: "user", Content: "last user message"},
+		},
+		InputItems: []InteractiveInputItem{
+			{Type: "text", Text: "explicit text wins"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunInteractiveTurn() error = %v", err)
+	}
+
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "explicit text wins"},
+	}) {
+		t.Fatalf("runner input = %#v, want explicit input items", runner.gotReq.Input)
 	}
 }
 
@@ -307,8 +398,10 @@ func TestCodexAppServerProvider_Chat_DelegatesToInteractiveTurn(t *testing.T) {
 	if runner.gotReq.Model != "gpt-5.4" {
 		t.Fatalf("runner model = %q, want %q", runner.gotReq.Model, "gpt-5.4")
 	}
-	if runner.gotReq.InputText != "hello from chat" {
-		t.Fatalf("runner input_text = %q, want %q", runner.gotReq.InputText, "hello from chat")
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "hello from chat"},
+	}) {
+		t.Fatalf("runner input = %#v, want chat text input item", runner.gotReq.Input)
 	}
 }
 
@@ -327,6 +420,42 @@ func TestCodexAppServerProvider_RunInteractiveTurn_ReturnsRunnerError(t *testing
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("RunInteractiveTurn() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestCodexAppServerProvider_SteerInteractiveTurn_DelegatesToRunner(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCodexAppServerRunner{
+		status: codexruntime.RuntimeStatusSnapshot{
+			ThreadID: "thr_123",
+		},
+	}
+	provider := NewCodexAppServerProvider(runner)
+	req := InteractiveThreadControlRequest{
+		SessionKey: "session-1",
+		AgentID:    "agent-7",
+	}
+
+	err := provider.SteerInteractiveTurn(context.Background(), req, []InteractiveInputItem{
+		{Type: "text", Text: "focus on tests"},
+		{Type: "localImage", Path: "/tmp/steer.png"},
+	})
+	if err != nil {
+		t.Fatalf("SteerInteractiveTurn() error = %v", err)
+	}
+
+	if runner.readStatusBindingKey != "session-1:agent-7" {
+		t.Fatalf("SteerInteractiveTurn() read_status binding_key = %q, want %q", runner.readStatusBindingKey, "session-1:agent-7")
+	}
+	if runner.steerThreadID != "thr_123" {
+		t.Fatalf("SteerInteractiveTurn() thread_id = %q, want %q", runner.steerThreadID, "thr_123")
+	}
+	if !slices.Equal(runner.steerInput, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "focus on tests"},
+		{Type: "localImage", Path: "/tmp/steer.png"},
+	}) {
+		t.Fatalf("SteerInteractiveTurn() input = %#v, want structured steer input", runner.steerInput)
 	}
 }
 
@@ -538,8 +667,10 @@ func TestCodexAppServerProvider_RunInteractiveTurn_UsesLastUserMessage(t *testin
 		t.Fatalf("RunInteractiveTurn() error = %v", err)
 	}
 
-	if runner.gotReq.InputText != "visible user message" {
-		t.Fatalf("runner input_text = %q, want %q", runner.gotReq.InputText, "visible user message")
+	if !slices.Equal(runner.gotReq.Input, []codexruntime.TurnInputItem{
+		{Type: "text", Text: "visible user message"},
+	}) {
+		t.Fatalf("runner input = %#v, want visible user message input item", runner.gotReq.Input)
 	}
 }
 
@@ -676,6 +807,9 @@ type fakeCodexAppServerRunner struct {
 	toggleFastBindingKey  string
 	toggleFastValue       bool
 	resetBindingKey       string
+	steerThreadID         string
+	steerInput            []codexruntime.TurnInputItem
+	steerErr              error
 }
 
 func (f *fakeCodexAppServerRunner) RunTextTurn(_ context.Context, req codexruntime.RunRequest) (codexruntime.RunResult, error) {
@@ -731,4 +865,10 @@ func (f *fakeCodexAppServerRunner) ToggleFast(_ context.Context, bindingKey stri
 func (f *fakeCodexAppServerRunner) ResetThread(_ context.Context, bindingKey string) error {
 	f.resetBindingKey = bindingKey
 	return nil
+}
+
+func (f *fakeCodexAppServerRunner) SteerTurn(_ context.Context, threadID string, input []codexruntime.TurnInputItem) error {
+	f.steerThreadID = threadID
+	f.steerInput = append([]codexruntime.TurnInputItem(nil), input...)
+	return f.steerErr
 }

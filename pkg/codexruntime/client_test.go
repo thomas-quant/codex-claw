@@ -366,8 +366,8 @@ func TestClient_RunTextTurnProjectsFinalAssistantFromNotifications(t *testing.T)
 
 	var chunks []string
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 		OnChunk: func(chunk string) {
 			chunks = append(chunks, chunk)
 		},
@@ -403,8 +403,8 @@ func TestClient_RunTextTurnUsesCurrentAppServerTurnSchema(t *testing.T) {
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -423,7 +423,6 @@ func TestClient_RunTextTurnUsesCurrentAppServerTurnSchema(t *testing.T) {
 		Params struct {
 			ThreadIDLegacy string `json:"thread_id"`
 			ThreadID       string `json:"threadId"`
-			InputText      string `json:"input_text"`
 			Input          []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
@@ -442,9 +441,6 @@ func TestClient_RunTextTurnUsesCurrentAppServerTurnSchema(t *testing.T) {
 	}
 	if envelope.Params.ThreadIDLegacy != "" {
 		t.Fatalf("turn/start thread_id = %q, want empty legacy field", envelope.Params.ThreadIDLegacy)
-	}
-	if envelope.Params.InputText != "" {
-		t.Fatalf("turn/start input_text = %q, want empty legacy field", envelope.Params.InputText)
 	}
 	if len(envelope.Params.Input) != 1 {
 		t.Fatalf("turn/start input len = %d, want %d", len(envelope.Params.Input), 1)
@@ -472,8 +468,7 @@ func TestClient_RunTextTurnUsesStructuredInputAndSandboxPolicy(t *testing.T) {
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "legacy text should not win",
+		ThreadID: "thr_123",
 		Input: []TurnInputItem{
 			{Type: "text", Text: "hello"},
 			{Type: "image", URL: "https://example.com/cat.png"},
@@ -552,8 +547,8 @@ func TestClient_RunTextTurnHandlesNestedTurnCompletedShape(t *testing.T) {
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -578,8 +573,8 @@ func TestClient_RunTextTurnReturnsNestedTurnFailure(t *testing.T) {
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err == nil {
 		t.Fatal("RunTextTurn() error = nil, want turn failure")
@@ -607,8 +602,8 @@ func TestClient_RunTextTurnReplaysBufferedNotificationsAfterResponse(t *testing.
 
 	var chunks []string
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 		OnChunk: func(chunk string) {
 			chunks = append(chunks, chunk)
 		},
@@ -641,8 +636,8 @@ func TestClient_RunTextTurnHandlesToolCallServerRequest(t *testing.T) {
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 		HandleToolCall: func(_ context.Context, req ToolCallRequest) (ToolCallResult, error) {
 			if req.CallID != "call_1" {
 				t.Fatalf("tool call id = %q, want %q", req.CallID, "call_1")
@@ -705,8 +700,8 @@ func TestClient_RunTextTurnHandlesCurrentToolCallServerRequestShape(t *testing.T
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 		HandleToolCall: func(_ context.Context, req ToolCallRequest) (ToolCallResult, error) {
 			if req.CallID != "call_1" {
 				t.Fatalf("tool call id = %q, want %q", req.CallID, "call_1")
@@ -760,8 +755,8 @@ func TestClient_RunTextTurnHandlesPermissionsApprovalRequest(t *testing.T) {
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -808,8 +803,8 @@ func TestClient_RunTextTurnHandlesToolRequestUserInput(t *testing.T) {
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -867,8 +862,8 @@ func TestClient_RunTextTurnHandlesChatgptAuthTokensRefresh(t *testing.T) {
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -918,8 +913,8 @@ func TestClient_RunTextTurnRejectsServerRequest(t *testing.T) {
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -985,8 +980,8 @@ func TestClient_RunTextTurnRejectsServerRequestWithZeroOrStringID(t *testing.T) 
 			}
 
 			content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-				ThreadID:  "thr_123",
-				InputText: "hi",
+				ThreadID: "thr_123",
+				Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 			})
 			if err != nil {
 				t.Fatalf("RunTextTurn() error = %v", err)
@@ -1037,8 +1032,8 @@ func TestClient_RunTextTurnRejectsReentrantClientCallsDuringChunkCallback(t *tes
 
 	go func() {
 		content, err := client.RunTextTurn(ctx, RunTurnRequest{
-			ThreadID:  "thr_123",
-			InputText: "hi",
+			ThreadID: "thr_123",
+			Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 			OnChunk: func(string) {
 				callbackErrCh <- client.Notify(context.Background(), "client/ping", map[string]any{"ok": true})
 			},
@@ -1148,8 +1143,8 @@ func TestClient_RunTextTurnRejectsToolCallRequestWithThreadMismatch(t *testing.T
 	}
 
 	content, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err != nil {
 		t.Fatalf("RunTextTurn() error = %v", err)
@@ -1193,8 +1188,8 @@ func TestClient_RunTextTurnReturnsDecodeErrorForMalformedNotification(t *testing
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err == nil {
 		t.Fatal("RunTextTurn() error = nil, want decode failure")
@@ -1219,8 +1214,8 @@ func TestClient_RunTextTurnReturnsReadErrorWhenTransportDiesMidTurn(t *testing.T
 	}
 
 	_, err := client.RunTextTurn(context.Background(), RunTurnRequest{
-		ThreadID:  "thr_123",
-		InputText: "hi",
+		ThreadID: "thr_123",
+		Input:    []TurnInputItem{{Type: "text", Text: "hi"}},
 	})
 	if err == nil {
 		t.Fatal("RunTextTurn() error = nil, want transport read error")

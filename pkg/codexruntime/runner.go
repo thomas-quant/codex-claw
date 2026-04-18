@@ -28,7 +28,6 @@ type ControlRequest struct {
 type RunRequest struct {
 	BindingKey     string
 	Model          string
-	InputText      string
 	Input          []TurnInputItem
 	SandboxPolicy  *SandboxPolicy
 	Recovery       RecoveryRequest
@@ -129,7 +128,6 @@ func (r *Runner) RunTextTurn(ctx context.Context, req RunRequest) (RunResult, er
 
 	content, err := r.client.RunTextTurn(ctx, RunTurnRequest{
 		ThreadID:       threadID,
-		InputText:      req.InputText,
 		Input:          req.Input,
 		SandboxPolicy:  req.SandboxPolicy,
 		HandleToolCall: req.HandleToolCall,
